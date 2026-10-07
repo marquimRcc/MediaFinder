@@ -274,8 +274,7 @@ class MainWindow(QMainWindow):
         self.config.set("preview_visible", visible)
 
     def perform_search(self):
-        """Executa busca no banco de dados com os critérios atuais."""
-        files, total_count = self.db.search_files(
+        files, total_count, total_size = self.db.search_files(
             query=self._current_query,
             category=self._current_category,
             drive=self._current_drive,
@@ -284,11 +283,15 @@ class MainWindow(QMainWindow):
         )
         self.results_table.set_results(files)
 
-        total_bytes = sum(f.get("size", 0) for f in files)
         query_desc = f' para "{self._current_query}"' if self._current_query else ""
-        self.lbl_status_results.setText(
-            f"Exibindo {len(files):,} de {total_count:,} arquivos encontrados{query_desc} ({format_file_size(total_bytes)})"
-        )
+        if len(files) < total_count:
+            self.lbl_status_results.setText(
+                f"Exibindo {len(files):,} de {total_count:,} arquivos encontrados{query_desc} (Total: {format_file_size(total_size)})"
+            )
+        else:
+            self.lbl_status_results.setText(
+                f"{total_count:,} arquivos encontrados{query_desc} (Total: {format_file_size(total_size)})"
+            )
 
         if not files:
             self.preview_panel.set_file_data(None)

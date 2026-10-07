@@ -69,17 +69,17 @@ def run_tests():
         db.upsert_files_batch(test_files)
         
         # Teste de busca por termo
-        results, total = db.search_files(query="acao")
+        results, total, size = db.search_files(query="acao")
         assert total == 1
         assert results[0]["name"] == "filme_acao_2026.mp4"
 
         # Teste de busca por categoria
-        results, total = db.search_files(category="image")
+        results, total, size = db.search_files(category="image")
         assert total == 1
         assert results[0]["name"] == "foto_viagem.jpg"
 
         # Teste de busca por drive
-        results, total = db.search_files(drive="H:")
+        results, total, size = db.search_files(drive="H:")
         assert total == 1
         assert results[0]["name"] == "musica_rock.flac"
 

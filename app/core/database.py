@@ -207,12 +207,12 @@ class MediaDatabase:
             }
             order_sql = sort_map.get(sort_by, "f.name COLLATE NOCASE ASC")
 
-            # Contagem total para a busca
-            count_query = f"SELECT COUNT(*) as total FROM files f {where_sql}"
+            count_query = f"SELECT COUNT(*) as total, COALESCE(SUM(f.size), 0) as total_size FROM files f {where_sql}"
             cursor.execute(count_query, params)
-            total_count = cursor.fetchone()["total"]
+            count_row = cursor.fetchone()
+            total_count = count_row["total"]
+            total_size = count_row["total_size"]
 
-            # Consulta dos resultados
             data_query = f"""
                 SELECT f.id, f.name, f.path, f.parent_dir, f.extension, f.category, f.size, f.mtime, f.drive
                 FROM files f
@@ -223,7 +223,7 @@ class MediaDatabase:
             cursor.execute(data_query, params + [limit, offset])
             rows = [dict(r) for r in cursor.fetchall()]
 
-            return rows, total_count
+            return rows, total_count, total_size
 
     def get_random_file(
         self,

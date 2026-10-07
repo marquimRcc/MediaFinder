@@ -429,9 +429,8 @@ class TVScheduleManager:
         else:
             base_seed = start_of_day.toordinal()
 
-        # Pré-carrega mídias globais indexadas para fallback de canais automáticos
-        video_files, _ = self.db.search_files(query="", category="video", limit=30000)
-        audio_files, _ = self.db.search_files(query="", category="audio", limit=5000)
+        video_files, *_ = self.db.search_files(query="", category="video", limit=30000)
+        audio_files, *_ = self.db.search_files(query="", category="audio", limit=5000)
 
         # Categorização em pools para canais sem pastas específicas
         classified_pools: Dict[str, List[Dict[str, Any]]] = {
