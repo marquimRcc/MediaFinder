@@ -171,9 +171,10 @@ class MainWindow(QMainWindow):
 
     def _init_system_tray(self):
         """Inicializa a bandeja do sistema (Windows System Tray) com menu de acesso rápido."""
-        icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "assets", "icon.png")
+        base_dir = getattr(sys, "_MEIPASS", os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+        icon_path = os.path.join(base_dir, "assets", "icon.png")
         if not os.path.exists(icon_path):
-            icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "assets", "icon.ico")
+            icon_path = os.path.join(base_dir, "assets", "icon.ico")
 
         if os.path.exists(icon_path):
             self.app_icon = QIcon(icon_path)
