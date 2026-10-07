@@ -53,7 +53,6 @@ class ResultsTableView(QTableWidget):
         self.verticalHeader().setVisible(False)
         self.verticalHeader().setDefaultSectionSize(34)
 
-        # Ajusta larguras iniciais
         header = self.horizontalHeader()
         header.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         
@@ -61,26 +60,22 @@ class ResultsTableView(QTableWidget):
             self.setColumnWidth(idx, width)
             
         header.setSectionResizeMode(0, QHeaderView.Fixed)
-        header.setSectionResizeMode(1, QHeaderView.Stretch)       # Nome do Arquivo ganha espaço total
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
         header.setSectionResizeMode(2, QHeaderView.Interactive)
         header.setSectionResizeMode(3, QHeaderView.Interactive)
         header.setSectionResizeMode(4, QHeaderView.Interactive)
         header.setSectionResizeMode(5, QHeaderView.Interactive)
         header.setSectionResizeMode(6, QHeaderView.Interactive)
 
-        # Sinais
         self.itemSelectionChanged.connect(self._on_selection_changed)
         self.itemDoubleClicked.connect(self._on_double_clicked)
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self._show_context_menu)
 
     def set_results(self, files: List[Dict[str, Any]]):
-        """Carrega lista de arquivos na tabela."""
         self._current_results = files
         self.setRowCount(0)
         self.setRowCount(len(files))
-
-        # Desativa atualização visual durante preenchimento em massa
         self.setUpdatesEnabled(False)
 
         for row, f in enumerate(files):
@@ -94,50 +89,43 @@ class ResultsTableView(QTableWidget):
 
             icon_str = CATEGORY_ICONS.get(cat, "📦")
 
-            # Coluna 0: Ícone/Tipo
             item_type = QTableWidgetItem(icon_str)
             item_type.setTextAlignment(Qt.AlignCenter)
 
-            # Coluna 1: Nome do Arquivo
             item_name = QTableWidgetItem(name)
             item_name.setToolTip(f"📄 {name}\n📁 {path}\n💾 {format_file_size(size)} | 📅 {format_timestamp(mtime)}")
 
-            # Coluna 2: Extensão com cor diferenciada
             item_ext = QTableWidgetItem(ext)
             item_ext.setTextAlignment(Qt.AlignCenter)
             if cat == "video":
-                item_ext.setForeground(QColor("#60A5FA")) # Azul claro
+                item_ext.setForeground(QColor("#60A5FA"))
             elif cat == "image":
-                item_ext.setForeground(QColor("#34D399")) # Verde esmeralda
+                item_ext.setForeground(QColor("#34D399"))
             elif cat == "audio":
-                item_ext.setForeground(QColor("#FBBF24")) # Âmbar
+                item_ext.setForeground(QColor("#FBBF24"))
             else:
                 item_ext.setForeground(QColor("#94A3B8"))
 
-            # Coluna 3: Tamanho formatado
             size_str = format_file_size(size)
             item_size = QTableWidgetItem(size_str)
             item_size.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             item_size.setForeground(QColor("#38BDF8"))
 
-            # Coluna 4: HD / Drive com identificador visual
             item_drive = QTableWidgetItem(f"[{drive}]" if drive else "-")
             item_drive.setTextAlignment(Qt.AlignCenter)
             if "E:" in drive:
-                item_drive.setForeground(QColor("#22D3EE")) # Ciano
+                item_drive.setForeground(QColor("#22D3EE"))
             elif "F:" in drive:
-                item_drive.setForeground(QColor("#818CF8")) # Índigo
+                item_drive.setForeground(QColor("#818CF8"))
             elif "H:" in drive:
-                item_drive.setForeground(QColor("#C084FC")) # Roxo
+                item_drive.setForeground(QColor("#C084FC"))
             else:
                 item_drive.setForeground(QColor("#E2E8F0"))
 
-            # Coluna 5: Data Modificado
             date_str = format_timestamp(mtime)
             item_date = QTableWidgetItem(date_str)
             item_date.setForeground(QColor("#94A3B8"))
 
-            # Coluna 6: Caminho Completo
             item_path = QTableWidgetItem(path)
             item_path.setForeground(QColor("#64748B"))
             item_path.setToolTip(path)

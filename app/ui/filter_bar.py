@@ -19,7 +19,6 @@ class FilterBar(QWidget):
         main_layout.setContentsMargins(0, 2, 0, 2)
         main_layout.setSpacing(8)
 
-        # ScrollArea horizontal para os Chips de Categorias
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -34,7 +33,6 @@ class FilterBar(QWidget):
         chips_layout.setContentsMargins(0, 0, 0, 0)
         chips_layout.setSpacing(6)
 
-        # Grupo de Chips de Categorias
         self.btn_group = QButtonGroup(self)
         self.btn_group.setExclusive(True)
 
@@ -62,14 +60,12 @@ class FilterBar(QWidget):
         scroll_area.setWidget(chips_container)
         main_layout.addWidget(scroll_area, 1)
 
-        # Container dos Dropdowns (Unidade e Ordenação)
         dropdowns_widget = QWidget()
         dropdowns_widget.setStyleSheet("background: transparent;")
         dropdowns_layout = QHBoxLayout(dropdowns_widget)
         dropdowns_layout.setContentsMargins(0, 0, 0, 0)
         dropdowns_layout.setSpacing(6)
 
-        # Seletor de Unidade / Origem
         self.combo_drive = QComboBox()
         self.combo_drive.addItem("Todas as Unidades", "all")
         self.combo_drive.addItem(r"Drive E: (E:\Midias)", "E:")
@@ -78,7 +74,6 @@ class FilterBar(QWidget):
         self.combo_drive.currentIndexChanged.connect(self._emit_changes)
         dropdowns_layout.addWidget(self.combo_drive)
 
-        # Seletor de Ordenação
         self.combo_sort = QComboBox()
         self.combo_sort.addItem("Nome (A-Z)", "name_asc")
         self.combo_sort.addItem("Nome (Z-A)", "name_desc")

@@ -45,7 +45,6 @@ class TVPlayerWidget(QWidget):
         self.video_widget.setStyleSheet("background-color: #000000; border-radius: 8px;")
         self.player.setVideoOutput(self.video_widget)
 
-        # Conexões de sinais do media player
         self.player.positionChanged.connect(self._on_position_changed)
         self.player.durationChanged.connect(self._on_duration_changed)
         self.player.playbackStateChanged.connect(self._on_state_changed)
@@ -62,7 +61,6 @@ class TVPlayerWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
 
-        # 1. Faixa Superior de Informações (Canal / Título)
         self.header_info = QFrame(self)
         self.header_info.setStyleSheet("""
             QFrame {
@@ -85,7 +83,6 @@ class TVPlayerWidget(QWidget):
 
         layout.addWidget(self.header_info)
 
-        # 2. Container de Vídeo (Ocupa todo o centro com expansão máxima)
         self.video_container = QFrame(self)
         self.video_container.setStyleSheet("background-color: #000000; border-radius: 8px;")
         self.video_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -95,7 +92,6 @@ class TVPlayerWidget(QWidget):
 
         layout.addWidget(self.video_container, 1)
 
-        # 3. Barra de Controles
         self.controls_bar = QFrame(self)
         self.controls_bar.setStyleSheet("""
             QFrame {
@@ -109,7 +105,6 @@ class TVPlayerWidget(QWidget):
         controls_layout.setContentsMargins(8, 4, 8, 6)
         controls_layout.setSpacing(4)
 
-        # Linha de Scrubbing / Timeline
         time_layout = QHBoxLayout()
         time_layout.setSpacing(8)
 
@@ -146,7 +141,6 @@ class TVPlayerWidget(QWidget):
 
         controls_layout.addLayout(time_layout)
 
-        # Linha de Botões de Controle
         btns_layout = QHBoxLayout()
         btns_layout.setSpacing(6)
 
@@ -161,7 +155,6 @@ class TVPlayerWidget(QWidget):
         self.btn_stop.clicked.connect(self.stop)
         btns_layout.addWidget(self.btn_stop)
 
-        # Botão Faixa de Áudio (Dual Áudio / Idioma)
         self.btn_audio_track = QPushButton("🎧 Áudio (A)")
         self.btn_audio_track.setStyleSheet("padding: 5px 10px; font-size: 11px;")
         self.btn_audio_track.setToolTip("Alternar faixa de áudio / Dual Áudio (Tecla A). Clique com botão direito para ver opções.")
@@ -170,7 +163,6 @@ class TVPlayerWidget(QWidget):
         self.btn_audio_track.customContextMenuRequested.connect(self.show_audio_menu)
         btns_layout.addWidget(self.btn_audio_track)
 
-        # Botão Legendas
         self.btn_subtitle_track = QPushButton("💬 Legenda (S)")
         self.btn_subtitle_track.setStyleSheet("padding: 5px 10px; font-size: 11px;")
         self.btn_subtitle_track.setToolTip("Alternar legendas (Tecla S). Clique com botão direito para ver opções.")
@@ -179,7 +171,6 @@ class TVPlayerWidget(QWidget):
         self.btn_subtitle_track.customContextMenuRequested.connect(self.show_subtitle_menu)
         btns_layout.addWidget(self.btn_subtitle_track)
 
-        # Volume
         self.btn_mute_toggle = QPushButton("🔊")
         self.btn_mute_toggle.setStyleSheet("font-size: 13px; padding: 4px 6px; background: transparent; border: none;")
         self.btn_mute_toggle.setToolTip("Silenciar / Ativar Som (M)")
@@ -195,14 +186,12 @@ class TVPlayerWidget(QWidget):
 
         btns_layout.addStretch()
 
-        # Botão Reprodutor Externo
         self.btn_external_player = QPushButton("🚀 Abrir no Windows Player")
         self.btn_external_player.setStyleSheet("padding: 5px 10px; font-size: 11px;")
         self.btn_external_player.setToolTip("Abre o arquivo atual no player padrão do Windows (VLC, etc.)")
         self.btn_external_player.clicked.connect(self._open_in_external_player)
         btns_layout.addWidget(self.btn_external_player)
 
-        # Botão Tela Cheia
         self.btn_fullscreen = QPushButton("⛶ Tela Cheia")
         self.btn_fullscreen.setStyleSheet("padding: 5px 10px; font-size: 11px;")
         self.btn_fullscreen.clicked.connect(self.toggle_fullscreen)

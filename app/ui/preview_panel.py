@@ -167,7 +167,6 @@ class PreviewPanel(QFrame):
         layout.addWidget(self.info_container)
         layout.addStretch(1)
 
-        # Botões de Ação
         actions_layout = QVBoxLayout()
         actions_layout.setSpacing(6)
 
@@ -183,7 +182,6 @@ class PreviewPanel(QFrame):
         self.btn_explorer.clicked.connect(self._on_reveal_explorer)
         actions_layout.addWidget(self.btn_explorer)
 
-        # Botões auxiliares de cópia
         copy_layout = QHBoxLayout()
         copy_layout.setSpacing(6)
 
@@ -203,7 +201,6 @@ class PreviewPanel(QFrame):
         layout.addLayout(actions_layout)
 
     def set_file_data(self, file_data: Optional[Dict[str, Any]]):
-        """Atualiza os detalhes e a prévia do arquivo selecionado."""
         self.current_file_data = file_data
 
         if not file_data:
@@ -230,7 +227,6 @@ class PreviewPanel(QFrame):
         self.btn_copy_folder.setEnabled(True)
         self.lbl_res.setVisible(False)
 
-        # 1. Arquivos de Texto / Documentos legíveis (.txt, .nfo, .srt, .vtt, .log)
         text_extensions = {".txt", ".nfo", ".srt", ".vtt", ".sub", ".log", ".json", ".xml", ".ini", ".inf"}
         if ext in text_extensions:
             self.img_container.setVisible(False)
@@ -246,7 +242,6 @@ class PreviewPanel(QFrame):
                 self.text_preview.setPlainText(f"Não foi possível ler o arquivo: {e}")
             return
 
-        # Para imagens e outras mídias, ativa container de imagem
         self.text_preview.setVisible(False)
         self.img_container.setVisible(True)
 

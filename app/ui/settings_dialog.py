@@ -66,21 +66,17 @@ class SettingsDialog(QDialog):
             }
         """)
 
-        # Aba 1: Pastas & Unidades Monitoradas
         tab_global = self._build_global_folders_tab()
         self.tabs.addTab(tab_global, "📁 Pastas & Unidades Monitoradas")
 
-        # Aba 2: Grupos de Mídia & Categorias
         tab_groups = self._build_folder_groups_tab()
         self.tabs.addTab(tab_groups, "🏷️ Grupos de Mídia & Categorias")
 
-        # Aba 3: Sobre o Projeto & Licença
         tab_about = self._build_about_tab()
         self.tabs.addTab(tab_about, "ℹ️ Sobre")
 
         main_layout.addWidget(self.tabs, 1)
 
-        # Barra Inferior de Botões
         bottom_layout = QHBoxLayout()
         bottom_layout.setSpacing(8)
 
@@ -140,7 +136,6 @@ class SettingsDialog(QDialog):
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
 
-        # Estatísticas
         group_stats = QGroupBox("📊 Estatísticas da Base de Dados")
         group_stats.setStyleSheet("""
             QGroupBox {
@@ -181,7 +176,6 @@ class SettingsDialog(QDialog):
         splitter = QSplitter(Qt.Horizontal)
         splitter.setHandleWidth(4)
 
-        # Lado Esquerdo: Lista de Grupos
         left_box = QWidget()
         left_layout = QVBoxLayout(left_box)
         left_layout.setContentsMargins(0, 0, 0, 0)

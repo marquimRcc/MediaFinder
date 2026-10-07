@@ -57,7 +57,6 @@ class MainWindow(QMainWindow):
         self._setup_shortcuts()
         self._restore_previous_state()
 
-        # Inicia varredura automática se configurado
         if self.config.get("auto_scan_on_startup", True):
             QTimer.singleShot(400, self.start_indexing)
 
@@ -68,7 +67,6 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(12, 12, 12, 8)
         main_layout.setSpacing(10)
 
-        # 1. Top Header com Logo, Busca e Botões
         header_layout = QHBoxLayout()
         header_layout.setSpacing(8)
 
@@ -81,7 +79,6 @@ class MainWindow(QMainWindow):
         self.search_bar.reindex_requested.connect(self.start_indexing)
         header_layout.addWidget(self.search_bar, 1)
 
-        # Botão Modo Aleatório Rápido
         self.btn_random = QPushButton("🎲 Aleatório")
         self.btn_random.setObjectName("random_mode_btn")
         self.btn_random.setToolTip("Sorteia e abre uma mídia aleatória imediatamente (F4 / Ctrl+R)\nClique com botão direito para configurar pastas.")
@@ -90,14 +87,12 @@ class MainWindow(QMainWindow):
         self.btn_random.customContextMenuRequested.connect(self._show_random_menu)
         header_layout.addWidget(self.btn_random)
 
-        # Botão Modo TV (Grade 24h & Canais)
         self.btn_tv_mode = QPushButton("📺 Modo TV")
         self.btn_tv_mode.setObjectName("tv_mode_btn")
         self.btn_tv_mode.setToolTip("Abre o Modo TV com canais automáticos, grade de 24h e player integrado (F8 / Ctrl+T)")
         self.btn_tv_mode.clicked.connect(self._open_tv_mode)
         header_layout.addWidget(self.btn_tv_mode)
 
-        # Botão para Alternar Painel de Prévia
         self.btn_toggle_preview = QPushButton("👁️ Prévia")
         self.btn_toggle_preview.setCheckable(True)
         self.btn_toggle_preview.setChecked(self._preview_visible)
@@ -105,13 +100,11 @@ class MainWindow(QMainWindow):
         self.btn_toggle_preview.clicked.connect(self._toggle_preview_panel)
         header_layout.addWidget(self.btn_toggle_preview)
 
-        # Botão de Configurações
         self.btn_settings = QPushButton("⚙️ Pastas")
         self.btn_settings.setToolTip("Gerenciar pastas e unidades monitoradas, indexação e grupos de mídia")
         self.btn_settings.clicked.connect(self._open_settings)
         header_layout.addWidget(self.btn_settings)
 
-        # Botão Sobre
         self.btn_about = QPushButton("ℹ️ Sobre")
         self.btn_about.setToolTip("Informações sobre o MediaFinder, autor e licença")
         self.btn_about.clicked.connect(self._open_about)
@@ -119,39 +112,30 @@ class MainWindow(QMainWindow):
 
         main_layout.addLayout(header_layout)
 
-
-        # 2. Barra de Filtros
         self.filter_bar = FilterBar()
         self.filter_bar.filters_changed.connect(self._on_filters_changed)
         main_layout.addWidget(self.filter_bar)
 
-        # 3. Corpo com Splitter (Tabela à esquerda, Preview à direita)
         self.splitter = QSplitter(Qt.Horizontal)
         self.splitter.setHandleWidth(6)
         self.splitter.setChildrenCollapsible(True)
 
-        # Tabela de Resultados
         self.results_table = ResultsTableView()
         self.results_table.item_selected.connect(self._on_item_selected)
         self.results_table.delete_requested.connect(self._on_delete_files_requested)
         self.splitter.addWidget(self.results_table)
 
-        # Painel de Preview Lateral
         self.preview_panel = PreviewPanel()
         self.preview_panel.close_requested.connect(lambda: self._toggle_preview_panel(False))
         self.splitter.addWidget(self.preview_panel)
 
-        # Configura colapsabilidade do splitter
         self.splitter.setCollapsible(0, False)
         self.splitter.setCollapsible(1, True)
-
-        # Proporção inicial do splitter: 70% tabela, 30% preview
         self.splitter.setStretchFactor(0, 3)
         self.splitter.setStretchFactor(1, 1)
         self.preview_panel.setVisible(self._preview_visible)
         main_layout.addWidget(self.splitter, 1)
 
-        # 4. Barra de Status
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
 
