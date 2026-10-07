@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal, Qt
 
 class FilterBar(QWidget):
-    """Barra de filtros por tipo de mídia, HD/Drive e ordenação responsiva."""
+    """Barra de filtros por tipo de mídia, unidade/origem e ordenação responsiva."""
 
     filters_changed = Signal(str, str, str)  # (categoria, drive, ordenacao)
 
@@ -62,16 +62,16 @@ class FilterBar(QWidget):
         scroll_area.setWidget(chips_container)
         main_layout.addWidget(scroll_area, 1)
 
-        # Container dos Dropdowns (HD e Ordenação)
+        # Container dos Dropdowns (Unidade e Ordenação)
         dropdowns_widget = QWidget()
         dropdowns_widget.setStyleSheet("background: transparent;")
         dropdowns_layout = QHBoxLayout(dropdowns_widget)
         dropdowns_layout.setContentsMargins(0, 0, 0, 0)
         dropdowns_layout.setSpacing(6)
 
-        # Seletor de HD / Drive
+        # Seletor de Unidade / Origem
         self.combo_drive = QComboBox()
-        self.combo_drive.addItem("Todos os HDs", "all")
+        self.combo_drive.addItem("Todas as Unidades", "all")
         self.combo_drive.addItem(r"Drive E: (E:\Midias)", "E:")
         self.combo_drive.addItem(r"Drive F: (F:\Midias)", "F:")
         self.combo_drive.addItem(r"Drive H: (H:\Midias)", "H:")
@@ -119,11 +119,11 @@ class FilterBar(QWidget):
 
 
     def set_available_drives(self, drives: list[str]):
-        """Atualiza a lista de drives no combobox dinamicamente."""
+        """Atualiza a lista de unidades no combobox dinamicamente."""
         current_data = self.combo_drive.currentData()
         self.combo_drive.blockSignals(True)
         self.combo_drive.clear()
-        self.combo_drive.addItem("Todos os HDs", "all")
+        self.combo_drive.addItem("Todas as Unidades", "all")
 
         for d in sorted(drives):
             if d:

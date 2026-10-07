@@ -30,7 +30,7 @@ class ResultsTableView(QTableWidget):
         ("Nome do Arquivo", 360),
         ("Ext", 60),
         ("Tamanho", 85),
-        ("HD", 55),
+        ("Unidade", 65),
         ("Modificado Em", 125),
         ("Caminho Completo", 300)
     ]

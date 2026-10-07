@@ -53,7 +53,7 @@ class ChannelConfigDialog(QDialog):
         lbl_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #38BDF8;")
         h_layout.addWidget(lbl_title)
 
-        lbl_desc = QLabel("Crie canais, associe grupos de pastas multi-HD (ex: Filmes ou Séries em múltiplos discos) e defina a ordem de transmissão (Aleatório ou Sequencial cronológico).")
+        lbl_desc = QLabel("Crie canais, associe grupos de pastas e mídias (ex: Filmes ou Séries em múltiplos locais) e defina a ordem de transmissão (Aleatório ou Sequencial cronológico).")
         lbl_desc.setStyleSheet("font-size: 11px; color: #94A3B8;")
         lbl_desc.setWordWrap(True)
         h_layout.addWidget(lbl_desc)
@@ -226,8 +226,8 @@ class ChannelConfigDialog(QDialog):
 
         form_layout.addLayout(row2)
 
-        # Linha 3: Grupos de Mídia Multi-HD (Equivalências configuradas)
-        lbl_groups_title = QLabel("🏷️ Grupos de Mídia Multi-HD Vinculados:")
+        # Linha 3: Grupos de Mídia Vinculados (Equivalências configuradas)
+        lbl_groups_title = QLabel("🏷️ Grupos de Mídia Vinculados:")
         lbl_groups_title.setStyleSheet("font-size: 11px; font-weight: bold; color: #E2E8F0; margin-top: 4px;")
         form_layout.addWidget(lbl_groups_title)
 
@@ -266,7 +266,7 @@ class ChannelConfigDialog(QDialog):
         self.btn_add_folder.clicked.connect(self._add_folder_to_channel)
         folder_btns_layout.addWidget(self.btn_add_folder)
 
-        self.btn_import_sub = QPushButton("📑 Escolher Subpasta dos HDs...")
+        self.btn_import_sub = QPushButton("📑 Escolher Subpasta Indexada...")
         self.btn_import_sub.clicked.connect(self._import_subfolder_to_channel)
         folder_btns_layout.addWidget(self.btn_import_sub)
 
@@ -530,7 +530,7 @@ class ChannelConfigDialog(QDialog):
         item, ok = QInputDialog.getItem(
             self,
             "Escolher Subpasta Indexada",
-            "Selecione uma subpasta indexada nos HDs para este canal:",
+            "Selecione uma subpasta indexada para este canal:",
             known_subfolders,
             0,
             False

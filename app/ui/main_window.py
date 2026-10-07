@@ -106,8 +106,8 @@ class MainWindow(QMainWindow):
         header_layout.addWidget(self.btn_toggle_preview)
 
         # Botão de Configurações
-        self.btn_settings = QPushButton("⚙️ HDs")
-        self.btn_settings.setToolTip("Gerenciar pastas, HDs monitorados e grupos multi-HD")
+        self.btn_settings = QPushButton("⚙️ Pastas")
+        self.btn_settings.setToolTip("Gerenciar pastas e unidades monitoradas, indexação e grupos de mídia")
         self.btn_settings.clicked.connect(self._open_settings)
         header_layout.addWidget(self.btn_settings)
 
@@ -213,7 +213,7 @@ class MainWindow(QMainWindow):
 
             tray_menu.addSeparator()
 
-            act_settings = tray_menu.addAction("⚙️ Gerenciar HDs & Pastas...")
+            act_settings = tray_menu.addAction("⚙️ Gerenciar Pastas & Fontes...")
             act_settings.triggered.connect(self._open_settings)
 
             act_about = tray_menu.addAction("ℹ️ Sobre o MediaFinder...")
@@ -338,7 +338,7 @@ class MainWindow(QMainWindow):
                 f"Tem certeza de que deseja EXCLUIR permanentemente do disco os {count} arquivos selecionados?\n\n"
                 f"💾 Espaço total a ser liberado: {size_str}\n\n"
                 f"Arquivos a serem apagados:\n{sample_names}\n\n"
-                f"⚠️ ATENÇÃO: Os arquivos serão apagados fisicamente das pastas dos seus HDs!"
+                f"⚠️ ATENÇÃO: Os arquivos serão apagados fisicamente das pastas dos seus discos/unidades!"
             )
 
         reply = QMessageBox.warning(
@@ -386,7 +386,7 @@ class MainWindow(QMainWindow):
             )
 
     def start_indexing(self):
-        """Inicia varredura em segundo plano das pastas e HDs."""
+        """Inicia varredura em segundo plano das pastas e unidades monitoradas."""
         if self.worker and self.worker.isRunning():
             return
 

@@ -35,7 +35,7 @@ def reveal_in_explorer(file_path: str) -> bool:
         return False
 
 def is_path_accessible(path_str: str) -> bool:
-    """Verifica se o caminho/HD está acessível e online no momento."""
+    """Verifica se o caminho/unidade está acessível e online no momento."""
     try:
         return os.path.exists(path_str)
     except Exception:

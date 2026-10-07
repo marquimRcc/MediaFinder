@@ -54,7 +54,7 @@ class IndexWorker(QThread):
                 break
 
             if not os.path.exists(folder):
-                self.error_occurred.emit(folder, "Diretório ou HD não está acessível no momento.")
+                self.error_occurred.emit(folder, "Diretório ou unidade não está acessível no momento.")
                 continue
 
             try:

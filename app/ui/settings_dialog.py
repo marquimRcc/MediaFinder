@@ -15,7 +15,7 @@ from app.utils.media_helpers import format_file_size
 
 
 class SettingsDialog(QDialog):
-    """Diálogo de gerenciamento de HDs, indexação, grupos de mídia multi-HD e informações sobre o projeto."""
+    """Diálogo de gerenciamento de pastas e unidades, indexação, grupos de mídia e informações sobre o projeto."""
 
     reindex_requested = Signal()
     folder_groups_updated = Signal()
@@ -66,13 +66,13 @@ class SettingsDialog(QDialog):
             }
         """)
 
-        # Aba 1: HDs & Pastas Globais
+        # Aba 1: Pastas & Unidades Monitoradas
         tab_global = self._build_global_folders_tab()
-        self.tabs.addTab(tab_global, "📁 HDs & Pastas Monitoradas")
+        self.tabs.addTab(tab_global, "📁 Pastas & Unidades Monitoradas")
 
-        # Aba 2: Grupos de Mídia (Equivalência Multi-HD)
+        # Aba 2: Grupos de Mídia & Categorias
         tab_groups = self._build_folder_groups_tab()
-        self.tabs.addTab(tab_groups, "🏷️ Grupos de Mídia & Categorias Multi-HD")
+        self.tabs.addTab(tab_groups, "🏷️ Grupos de Mídia & Categorias")
 
         # Aba 3: Sobre o Projeto & Licença
         tab_about = self._build_about_tab()
@@ -108,7 +108,7 @@ class SettingsDialog(QDialog):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
 
-        lbl_desc = QLabel("Selecione as raízes dos HDs ou pastas que o MediaFinder deve varrer e indexar:")
+        lbl_desc = QLabel("Selecione os diretórios, unidades ou pontos de montagem que o MediaFinder deve varrer e indexar:")
         lbl_desc.setStyleSheet("color: #94A3B8; font-size: 11px;")
         layout.addWidget(lbl_desc)
 
@@ -129,7 +129,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(self.list_folders, 1)
 
         btn_layout = QHBoxLayout()
-        self.btn_add_watched = QPushButton("➕ Adicionar Pasta / HD...")
+        self.btn_add_watched = QPushButton("➕ Adicionar Pasta / Unidade...")
         self.btn_add_watched.clicked.connect(self._add_watched_folder)
         btn_layout.addWidget(self.btn_add_watched)
 
@@ -173,7 +173,7 @@ class SettingsDialog(QDialog):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
 
-        lbl_desc = QLabel("Crie categorias e equivalências para unir pastas de múltiplos HDs (ex: 'Filmes' contendo pastas do E:, F: e H:). Esses grupos alimentam o buscador e o Modo TV automaticamente:")
+        lbl_desc = QLabel("Crie categorias e equivalências para unir pastas de múltiplos locais ou unidades (ex: 'Filmes' contendo pastas em diferentes discos). Esses grupos alimentam o buscador e o Modo TV automaticamente:")
         lbl_desc.setStyleSheet("color: #94A3B8; font-size: 11px;")
         lbl_desc.setWordWrap(True)
         layout.addWidget(lbl_desc)

@@ -155,7 +155,7 @@ class PreviewPanel(QFrame):
         self.lbl_date.setStyleSheet("color: #94A3B8;")
         info_layout.addWidget(self.lbl_date)
 
-        self.lbl_drive = QLabel("HD: -")
+        self.lbl_drive = QLabel("Unidade: -")
         self.lbl_drive.setStyleSheet("color: #94A3B8;")
         info_layout.addWidget(self.lbl_drive)
 
@@ -221,7 +221,7 @@ class PreviewPanel(QFrame):
         self.lbl_name.setText(name)
         self.lbl_size.setText(f"Tamanho: {format_file_size(size)}")
         self.lbl_date.setText(f"Modificado: {format_timestamp(mtime)}")
-        self.lbl_drive.setText(f"HD / Origem: {drive}")
+        self.lbl_drive.setText(f"Origem / Unidade: {drive}")
         self.lbl_path.setText(f"Caminho:\n{file_path}")
 
         self.btn_open.setEnabled(True)
@@ -241,7 +241,7 @@ class PreviewPanel(QFrame):
                         snippet = tf.read(2500)
                         self.text_preview.setPlainText(snippet if snippet.strip() else "(Arquivo vazio)")
                 else:
-                    self.text_preview.setPlainText("Arquivo inacessível ou HD desconectado.")
+                    self.text_preview.setPlainText("Arquivo inacessível ou unidade desconectada.")
             except Exception as e:
                 self.text_preview.setPlainText(f"Não foi possível ler o arquivo: {e}")
             return
@@ -306,7 +306,7 @@ class PreviewPanel(QFrame):
         self.lbl_size.setText("Tamanho: -")
         self.lbl_res.setVisible(False)
         self.lbl_date.setText("Modificado: -")
-        self.lbl_drive.setText("HD: -")
+        self.lbl_drive.setText("Unidade: -")
         self.lbl_path.setText("Caminho: -")
         self.btn_open.setEnabled(False)
         self.btn_explorer.setEnabled(False)
@@ -318,7 +318,7 @@ class PreviewPanel(QFrame):
         if self.current_file_data:
             path = self.current_file_data.get("path", "")
             if not open_file(path):
-                QMessageBox.warning(self, "Aviso", f"Não foi possível abrir o arquivo ou o HD está desconectado:\n{path}")
+                QMessageBox.warning(self, "Aviso", f"Não foi possível abrir o arquivo ou a unidade está desconectada:\n{path}")
 
     def _on_reveal_explorer(self):
         if self.current_file_data:
