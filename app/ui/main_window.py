@@ -107,11 +107,18 @@ class MainWindow(QMainWindow):
 
         # Botão de Configurações
         self.btn_settings = QPushButton("⚙️ HDs")
-        self.btn_settings.setToolTip("Gerenciar pastas e HDs monitorados")
+        self.btn_settings.setToolTip("Gerenciar pastas, HDs monitorados e grupos multi-HD")
         self.btn_settings.clicked.connect(self._open_settings)
         header_layout.addWidget(self.btn_settings)
 
+        # Botão Sobre
+        self.btn_about = QPushButton("ℹ️ Sobre")
+        self.btn_about.setToolTip("Informações sobre o MediaFinder, autor e licença")
+        self.btn_about.clicked.connect(self._open_about)
+        header_layout.addWidget(self.btn_about)
+
         main_layout.addLayout(header_layout)
+
 
         # 2. Barra de Filtros
         self.filter_bar = FilterBar()
@@ -209,9 +216,13 @@ class MainWindow(QMainWindow):
             act_settings = tray_menu.addAction("⚙️ Gerenciar HDs & Pastas...")
             act_settings.triggered.connect(self._open_settings)
 
+            act_about = tray_menu.addAction("ℹ️ Sobre o MediaFinder...")
+            act_about.triggered.connect(self._open_about)
+
             tray_menu.addSeparator()
 
             act_quit = tray_menu.addAction("✕ Sair do MediaFinder")
+
             act_quit.triggered.connect(self._quit_application)
 
             self.tray_icon.setContextMenu(tray_menu)
@@ -424,11 +435,16 @@ class MainWindow(QMainWindow):
         pass
 
     def _open_settings(self):
-        dialog = SettingsDialog(self.config, self.db, self)
+        dialog = SettingsDialog(self.config, self.db, default_tab=0, parent=self)
         if dialog.exec():
             self._update_drives_list()
             self.perform_search()
             self.start_indexing()
+
+    def _open_about(self):
+        dialog = SettingsDialog(self.config, self.db, default_tab=2, parent=self)
+        dialog.exec()
+
 
     def _open_random_settings(self):
         dialog = RandomMediaDialog(self.config, self.db, self)

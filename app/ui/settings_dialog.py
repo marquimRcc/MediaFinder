@@ -4,9 +4,10 @@ from typing import List, Dict, Any, Optional
 from PySide6.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QFileDialog, QMessageBox, QGroupBox, QTabWidget,
-    QInputDialog, QSplitter, QFrame
+    QInputDialog, QSplitter, QFrame, QScrollArea
 )
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import Signal, Qt, QUrl
+from PySide6.QtGui import QIcon, QPixmap, QDesktopServices
 
 from app.core.config import AppConfig
 from app.core.database import MediaDatabase
@@ -14,18 +15,18 @@ from app.utils.media_helpers import format_file_size
 
 
 class SettingsDialog(QDialog):
-    """Diálogo de gerenciamento de HDs, indexação e grupos de equivalência de mídia multi-HD."""
+    """Diálogo de gerenciamento de HDs, indexação, grupos de mídia multi-HD e informações sobre o projeto."""
 
     reindex_requested = Signal()
     folder_groups_updated = Signal()
 
-    def __init__(self, config: AppConfig, db: MediaDatabase, parent=None):
+    def __init__(self, config: AppConfig, db: MediaDatabase, default_tab: int = 0, parent=None):
         super().__init__(parent)
         self.config = config
         self.db = db
-        self.setWindowTitle("Configurações do MediaFinder — Pastas, HDs & Grupos")
-        self.resize(720, 540)
-        self.setMinimumSize(640, 460)
+        self.setWindowTitle("Configurações & Sobre — MediaFinder")
+        self.resize(760, 560)
+        self.setMinimumSize(660, 480)
         self.setModal(True)
 
         self.groups_data: Dict[str, List[str]] = dict(self.config.get_folder_groups())
@@ -33,6 +34,9 @@ class SettingsDialog(QDialog):
 
         self._init_ui()
         self._load_data()
+
+        if 0 <= default_tab < self.tabs.count():
+            self.tabs.setCurrentIndex(default_tab)
 
     def _init_ui(self):
         main_layout = QVBoxLayout(self)
@@ -69,6 +73,10 @@ class SettingsDialog(QDialog):
         # Aba 2: Grupos de Mídia (Equivalência Multi-HD)
         tab_groups = self._build_folder_groups_tab()
         self.tabs.addTab(tab_groups, "🏷️ Grupos de Mídia & Categorias Multi-HD")
+
+        # Aba 3: Sobre o Projeto & Licença
+        tab_about = self._build_about_tab()
+        self.tabs.addTab(tab_about, "ℹ️ Sobre")
 
         main_layout.addWidget(self.tabs, 1)
 
@@ -247,7 +255,7 @@ class SettingsDialog(QDialog):
         self.btn_add_folder_to_grp.clicked.connect(self._add_folder_to_group)
         f_btns.addWidget(self.btn_add_folder_to_grp)
 
-        self.btn_import_subfolder = QPushButton("📑 Escolher das Subpastas dos HDs...")
+        self.btn_import_subfolder = QPushButton("📑 Escolher Subpasta...")
         self.btn_import_subfolder.clicked.connect(self._import_subfolder_to_group)
         f_btns.addWidget(self.btn_import_subfolder)
 
@@ -263,6 +271,105 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(splitter, 1)
         return widget
+
+    def _build_about_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(14)
+
+        # Card Principal de Apresentação
+        info_card = QFrame()
+        info_card.setStyleSheet("""
+            QFrame {
+                background-color: #12151B;
+                border: 1px solid #242A34;
+                border-radius: 8px;
+                padding: 14px;
+            }
+        """)
+        card_layout = QVBoxLayout(info_card)
+        card_layout.setSpacing(10)
+
+        # Header do App
+        top_row = QHBoxLayout()
+        top_row.setSpacing(12)
+
+        lbl_badge = QLabel("⚡")
+        lbl_badge.setStyleSheet("font-size: 32px; background-color: #1E293B; border-radius: 8px; padding: 4px;")
+        top_row.addWidget(lbl_badge)
+
+        v_titles = QVBoxLayout()
+        lbl_app_name = QLabel("MediaFinder — Buscador Rápido de Mídias & Central de TV")
+        lbl_app_name.setStyleSheet("font-size: 15px; font-weight: bold; color: #38BDF8;")
+        v_titles.addWidget(lbl_app_name)
+
+        lbl_version = QLabel("Versão 1.0.0 (Release Oficial Open Source)")
+        lbl_version.setStyleSheet("font-size: 11px; color: #94A3B8;")
+        v_titles.addWidget(lbl_version)
+
+        top_row.addLayout(v_titles, 1)
+        card_layout.addLayout(top_row)
+
+        # Divisor
+        div = QFrame()
+        div.setFrameShape(QFrame.HLine)
+        div.setStyleSheet("background-color: #1E242D;")
+        card_layout.addWidget(div)
+
+        # Detalhes do Autor e Licença
+        details_layout = QVBoxLayout()
+        details_layout.setSpacing(6)
+
+        lbl_author = QLabel("👤 <b>Desenvolvedor:</b> Jairo Ivo (<a href='https://github.com/xToshiro' style='color: #38BDF8; text-decoration: none;'>@xToshiro</a>)")
+        lbl_author.setOpenExternalLinks(True)
+        lbl_author.setStyleSheet("font-size: 12px; color: #E2E8F0;")
+        details_layout.addWidget(lbl_author)
+
+        lbl_repo = QLabel("🌐 <b>Repositório Oficial:</b> <a href='https://github.com/xToshiro/MediaFinder' style='color: #38BDF8; text-decoration: underline;'>https://github.com/xToshiro/MediaFinder</a>")
+        lbl_repo.setOpenExternalLinks(True)
+        lbl_repo.setStyleSheet("font-size: 12px; color: #E2E8F0;")
+        details_layout.addWidget(lbl_repo)
+
+        lbl_license = QLabel("⚖️ <b>Licença:</b> GNU General Public License v3.0 (GPLv3) — Software Livre & Código Aberto")
+        lbl_license.setStyleSheet("font-size: 12px; color: #10B981;")
+        details_layout.addWidget(lbl_license)
+
+        lbl_tech = QLabel("🛠️ <b>Tecnologias:</b> Python 3, PySide6 (Qt 6), SQLite3 WAL + FTS5, Pillow (PIL), PyInstaller")
+        lbl_tech.setStyleSheet("font-size: 11px; color: #94A3B8;")
+        details_layout.addWidget(lbl_tech)
+
+        card_layout.addLayout(details_layout)
+        layout.addWidget(info_card)
+
+        # Botão de Acesso Rápido ao GitHub
+        btn_box = QHBoxLayout()
+        self.btn_open_repo = QPushButton("🌐 Abrir Repositório no GitHub")
+        self.btn_open_repo.setStyleSheet("background-color: #24292E; color: #FFFFFF; font-weight: bold; padding: 8px 16px; border-radius: 4px; font-size: 12px;")
+        self.btn_open_repo.setCursor(Qt.PointingHandCursor)
+        self.btn_open_repo.clicked.connect(self._open_github_repo)
+        btn_box.addWidget(self.btn_open_repo)
+
+        self.btn_copy_repo_link = QPushButton("📋 Copiar Link")
+        self.btn_copy_repo_link.setStyleSheet("padding: 8px 14px; font-size: 11px;")
+        self.btn_copy_repo_link.clicked.connect(self._copy_repo_link)
+        btn_box.addWidget(self.btn_copy_repo_link)
+
+        btn_box.addStretch()
+        layout.addLayout(btn_box)
+
+        layout.addStretch(1)
+        return widget
+
+    def _open_github_repo(self):
+        QDesktopServices.openUrl(QUrl("https://github.com/xToshiro/MediaFinder"))
+
+    def _copy_repo_link(self):
+        from PySide6.QtWidgets import QApplication
+        clipboard = QApplication.clipboard()
+        if clipboard:
+            clipboard.setText("https://github.com/xToshiro/MediaFinder")
+            QMessageBox.information(self, "Copiado", "Link do repositório copiado para a área de transferência!")
 
     def _load_data(self):
         """Carrega pastas monitoradas, grupos e estatísticas."""
@@ -313,7 +420,6 @@ class SettingsDialog(QDialog):
                 return
             self.groups_data[clean_name] = []
             self._populate_groups_list()
-            # Seleciona o recém-criado
             items = self.list_groups.findItems(clean_name, Qt.MatchExactly)
             if items:
                 self.list_groups.setCurrentItem(items[0])
