@@ -275,91 +275,104 @@ class SettingsDialog(QDialog):
     def _build_about_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(14)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(16)
 
-        # Card Principal de Apresentação
+        # Card Principal Estilizado e Limpo (com ID específico para não vazar bordas aos QLabels)
         info_card = QFrame()
+        info_card.setObjectName("about_main_card")
         info_card.setStyleSheet("""
-            QFrame {
+            QFrame#about_main_card {
                 background-color: #12151B;
                 border: 1px solid #242A34;
-                border-radius: 8px;
-                padding: 14px;
+                border-radius: 10px;
+                padding: 18px;
+            }
+            QLabel {
+                border: none;
+                background: transparent;
+                padding: 0px;
             }
         """)
         card_layout = QVBoxLayout(info_card)
-        card_layout.setSpacing(10)
+        card_layout.setContentsMargins(16, 16, 16, 16)
+        card_layout.setSpacing(12)
 
         # Header do App
         top_row = QHBoxLayout()
-        top_row.setSpacing(12)
+        top_row.setSpacing(14)
 
         lbl_badge = QLabel("⚡")
-        lbl_badge.setStyleSheet("font-size: 32px; background-color: #1E293B; border-radius: 8px; padding: 4px;")
+        lbl_badge.setStyleSheet("font-size: 32px; background-color: #1E293B; border-radius: 8px; padding: 6px 10px; color: #38BDF8;")
         top_row.addWidget(lbl_badge)
 
         v_titles = QVBoxLayout()
+        v_titles.setSpacing(3)
         lbl_app_name = QLabel("MediaFinder — Buscador Rápido de Mídias & Central de TV")
-        lbl_app_name.setStyleSheet("font-size: 15px; font-weight: bold; color: #38BDF8;")
+        lbl_app_name.setStyleSheet("font-size: 16px; font-weight: bold; color: #F8FAFC;")
         v_titles.addWidget(lbl_app_name)
 
-        lbl_version = QLabel("Versão 1.0.0 (Release Oficial Open Source)")
-        lbl_version.setStyleSheet("font-size: 11px; color: #94A3B8;")
+        lbl_version = QLabel("Versão 1.0.0 • Release Oficial Open Source")
+        lbl_version.setStyleSheet("font-size: 12px; color: #38BDF8; font-weight: 600;")
         v_titles.addWidget(lbl_version)
 
         top_row.addLayout(v_titles, 1)
         card_layout.addLayout(top_row)
 
-        # Divisor
+        # Linha Divisória Fina
         div = QFrame()
         div.setFrameShape(QFrame.HLine)
-        div.setStyleSheet("background-color: #1E242D;")
+        div.setStyleSheet("background-color: #1E2530; border: none; max-height: 1px; margin: 4px 0;")
         card_layout.addWidget(div)
 
-        # Detalhes do Autor e Licença
+        # Detalhes do Autor e Licença em layout limpo
         details_layout = QVBoxLayout()
-        details_layout.setSpacing(6)
+        details_layout.setSpacing(8)
 
         lbl_author = QLabel("👤 <b>Desenvolvedor:</b> Jairo Ivo (<a href='https://github.com/xToshiro' style='color: #38BDF8; text-decoration: none;'>@xToshiro</a>)")
         lbl_author.setOpenExternalLinks(True)
-        lbl_author.setStyleSheet("font-size: 12px; color: #E2E8F0;")
+        lbl_author.setStyleSheet("font-size: 13px; color: #E2E8F0;")
         details_layout.addWidget(lbl_author)
 
         lbl_repo = QLabel("🌐 <b>Repositório Oficial:</b> <a href='https://github.com/xToshiro/MediaFinder' style='color: #38BDF8; text-decoration: underline;'>https://github.com/xToshiro/MediaFinder</a>")
         lbl_repo.setOpenExternalLinks(True)
-        lbl_repo.setStyleSheet("font-size: 12px; color: #E2E8F0;")
+        lbl_repo.setStyleSheet("font-size: 13px; color: #E2E8F0;")
         details_layout.addWidget(lbl_repo)
 
         lbl_license = QLabel("⚖️ <b>Licença:</b> GNU General Public License v3.0 (GPLv3) — Software Livre & Código Aberto")
-        lbl_license.setStyleSheet("font-size: 12px; color: #10B981;")
+        lbl_license.setStyleSheet("font-size: 13px; color: #34D399; font-weight: 500;")
         details_layout.addWidget(lbl_license)
 
         lbl_tech = QLabel("🛠️ <b>Tecnologias:</b> Python 3, PySide6 (Qt 6), SQLite3 WAL + FTS5, Pillow (PIL), PyInstaller")
-        lbl_tech.setStyleSheet("font-size: 11px; color: #94A3B8;")
+        lbl_tech.setStyleSheet("font-size: 12px; color: #94A3B8;")
         details_layout.addWidget(lbl_tech)
 
         card_layout.addLayout(details_layout)
-        layout.addWidget(info_card)
 
-        # Botão de Acesso Rápido ao GitHub
+        # Linha com Botões de Ação dentro do Card
         btn_box = QHBoxLayout()
-        self.btn_open_repo = QPushButton("🌐 Abrir Repositório no GitHub")
-        self.btn_open_repo.setStyleSheet("background-color: #24292E; color: #FFFFFF; font-weight: bold; padding: 8px 16px; border-radius: 4px; font-size: 12px;")
+        btn_box.setSpacing(8)
+        btn_box.setContentsMargins(0, 8, 0, 0)
+
+        self.btn_open_repo = QPushButton("🌐 Abrir no GitHub")
+        self.btn_open_repo.setObjectName("primary_action_btn")
         self.btn_open_repo.setCursor(Qt.PointingHandCursor)
+        self.btn_open_repo.setStyleSheet("padding: 7px 16px; font-size: 12px;")
         self.btn_open_repo.clicked.connect(self._open_github_repo)
         btn_box.addWidget(self.btn_open_repo)
 
         self.btn_copy_repo_link = QPushButton("📋 Copiar Link")
-        self.btn_copy_repo_link.setStyleSheet("padding: 8px 14px; font-size: 11px;")
+        self.btn_copy_repo_link.setStyleSheet("padding: 7px 14px; font-size: 12px; background-color: #1E232B; color: #E2E8F0; border: 1px solid #2D3748; border-radius: 6px;")
         self.btn_copy_repo_link.clicked.connect(self._copy_repo_link)
         btn_box.addWidget(self.btn_copy_repo_link)
 
         btn_box.addStretch()
-        layout.addLayout(btn_box)
+        card_layout.addLayout(btn_box)
 
+        layout.addWidget(info_card)
         layout.addStretch(1)
         return widget
+
 
     def _open_github_repo(self):
         QDesktopServices.openUrl(QUrl("https://github.com/xToshiro/MediaFinder"))
