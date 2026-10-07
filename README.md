@@ -1,154 +1,146 @@
-# ⚡ MediaFinder — Buscador Rápido de Mídias & Central de TV Multi-HD
+# MediaFinder
 
-Utilitário desktop moderno de alta performance desenvolvido em Python e Qt (PySide6), projetado para indexar, localizar instantaneamente e reproduzir arquivos de mídia (vídeos, fotos, áudios e documentos) distribuídos em **qualquer disco rígido, SSD, HD externo, pendrive ou pasta do Windows** (ex: `C:`, `D:`, `E:`, `F:`, etc.).
-
----
-
-## 🎯 Principais Recursos
-
-- ⚡ **Busca Instantânea**: Pesquisa em tempo real com resposta em milissegundos enquanto você digita (usando engine SQLite FTS com indexação otimizada).
-- 🧠 **Lembrança Automática**: Lembra da sua última pesquisa, dos filtros ativos e mantém histórico recente.
-- 🎛️ **Filtros Avançados**:
-  - **Categorias**: Todos, Vídeos (`.mp4`, `.mkv`, `.avi`, `.mov`...), Fotos/Imagens (`.jpg`, `.png`, `.webp`, `.psd`...), Áudios (`.mp3`, `.flac`, `.wav`...), Documentos/Projetos.
-  - **Filtro por Drive/Disco**: Isole a busca em qualquer letra de unidade (`C:`, `D:`, `E:`, `F:`...) ou pesquise em todos ao mesmo tempo.
-  - **Ordenação Multi-critério**: Por Nome (A-Z ou Z-A), Tamanho (Maior/Menor) e Data de Modificação recente.
-- 📺 **Modo TV (Grade de Programação 24h & Canais Personalizáveis)**:
-  - Janela desacoplada multi-monitor (`F8` / `Ctrl+T`) com transmissão contínua 24h por dia estilo televisão ao vivo.
-  - **Gerenciador Visual de Canais (`C`)**: Crie seus próprios canais, dê nomes, escolha ícones e defina o modo de reprodução:
-    - 🎲 **Aleatório (Shuffle)**: Ideal para Filmes, Curtas, Clipes e Variedades.
-    - 🔢 **Sequencial (Cronológico)**: Ideal para Séries, Animes, Desenhos e Cursos (mantém rigorosamente a ordem `S01E01` → `S01E02`... sem inverter episódios).
-  - **Sensibilidade à Duração Real**: A grade de programação se ajusta dinamicamente à duração real dos vídeos em reprodução, sem cortes prematuros.
-  - **Suporte Multimídia Completo**: Alternância de faixas de idioma (**Dual Áudio** tecla `A`), **Legendas integradas** (`S` / `L`) e **barras retrô vintage de volume** (`↑` / `↓`).
-- 🏷️ **Grupos de Mídia & Equivalência Multi-HD**:
-  - Unifique pastas de discos diferentes sob uma mesma categoria (ex: unir `D:\Filmes`, `E:\Cinema 4K` e `F:\HD_Externo\Filmes` no grupo *"Filmes"*).
-  - Crie categorias personalizadas (*Cursos*, *Novelas*, *Shows*, *Futebol*) que alimentam o buscador e os canais de TV de forma dinâmica.
-- 🎲 **Modo Aleatório Rápido (Shuffle)**:
-  - Sorteie e reproduza instantaneamente uma mídia com 1 clique (ou tecla `F4` / `Ctrl+R`), com suporte a filtros de pastas ou categorias.
-- 👁️ **Painel de Pré-Visualização & Detalhes**:
-  - Miniatura de imagens em alta definição, metadados completos e prévia de documentos.
-- 🚀 **Integração com o Windows**:
-  - Execução no player padrão (`Enter` ou 2 cliques), localização com seleção direta no Explorer (`explorer /select`) e exclusão física em lote com confirmação (`Delete`).
-- 🗔 **Bandeja do Sistema (System Tray)**:
-  - Acesso rápido ao lado do relógio do Windows para abrir o buscador, acionar a TV ou rodar sorteios.
+Buscador de arquivos e gerenciador multimídia desktop de alta performance desenvolvido em Python e Qt (PySide6), projetado para indexar, consultar e reproduzir coleções distribuídas em múltiplos discos rígidos, SSDs, unidades externas e diretórios montados no Windows.
 
 ---
 
-## 📁 Guia de Organização de Pastas e Boas Práticas
+## Funcionalidades
 
-O MediaFinder é totalmente flexível e funciona com qualquer estrutura de pastas. No entanto, seguir estas boas práticas garante que o **Modo TV** e os **Grupos de Mídia** identifiquem automaticamente séries, temporadas e episódios com máxima precisão:
+### Mecanismo de Busca e Indexação
+- **Busca em Tempo Real**: Consulta instantânea com debounce de 150ms utilizando SQLite FTS5 (`unicode61`) e índices compostos.
+- **Varredura Assíncrona**: Scanner em thread dedicada (`QThread`) sem congelamento da interface.
+- **Histórico e Persistência**: Restauração automática de filtros, termos de pesquisa e histórico recente.
 
-### 1. Estrutura Recomendada para Séries, Animes e Desenhos
-Para que o modo sequencial ordene cronologicamente as temporadas e episódios:
+### Filtros e Agrupamentos
+- **Filtragem por Categoria**: Vídeos, Imagens, Áudios e Documentos com contadores dinâmicos.
+- **Isolamento por Unidade**: Filtragem por letra de unidade ou pesquisa unificada em todas as fontes monitoradas.
+- **Grupos de Mídia**: Criação de equivalências entre diretórios de discos distintos (ex.: unificação de pastas em múltiplas unidades sob a categoria "Filmes").
+- **Ordenação Multi-critério**: Ordenação por nome, tamanho e data de modificação.
 
-```
-📁 Séries/
-   └── 📁 Breaking Bad/
-       ├── 📁 Temporada 01/
-       │   ├── Breaking Bad S01E01.mkv
-       │   ├── Breaking Bad S01E02.mkv
-       │   └── ...
-       └── 📁 Temporada 02/
-           ├── Breaking Bad S02E01.mkv
-           └── ...
+### Modo TV e Transmissão Contínua
+- **Player Integrado**: Reprodução contínua 24h em janela independente desacoplada.
+- **Ordem Cronológica ou Aleatória**:
+  - *Sequencial*: Ordenação cronológica rigorosa para séries e animes (`S01E01`, `S01E02`...).
+  - *Aleatório (Shuffle)*: Distribuição pseudo-aleatória sem repetições consecutivas.
+- **Sincronização Dinâmica**: Ajuste automático da grade de programação baseado na duração real dos arquivos.
+- **Controles Multimídia**: Alternância de trilhas de áudio (Dual Áudio), legendas embutidas e controle de volume.
 
-📁 Animes/
-   └── 📁 Naruto/
-       ├── Naruto - Episódio 01.mp4
-       ├── Naruto - Episódio 02.mp4
-       └── ...
-```
-
-> 💡 **Padrões de nomes reconhecidos automaticamente**:
-> - `S01E02` ou `s1e2`
-> - `1x05` ou `01x05`
-> - `Episódio 03`, `Ep 03`, `Capitulo 12`, `Parte 2`
-> - `Nome do Anime 025.mp4`
+### Painel de Pré-Visualização e Utilitários
+- **Prévia Integrada**: Renderização assíncrona de miniaturas para imagens e leitura rápida de metadados e arquivos de texto (`.txt`, `.nfo`, `.srt`, `.json`).
+- **Integração com Windows Explorer**: Abertura no player padrão do sistema ou localização direta via `explorer /select`.
+- **Modo Aleatório Rápido**: Sorteio instantâneo de mídias por atalho de teclado (`F4`).
+- **Gerenciamento de Arquivos**: Exclusão física com exibição detalhada do espaço em disco a ser liberado.
 
 ---
 
-### 2. Estrutura Recomendada para Filmes e Mídias Avulsas
-Para filmes e vídeos únicos, você pode colocá-los diretamente em pastas dedicadas ou organizá-los por gênero/ano:
+## Organização de Pastas e Boas Práticas
+
+O MediaFinder indexa qualquer estrutura de diretórios. Para melhor aproveitamento da ordenação cronológica do Modo TV, recomenda-se a seguinte padronização:
+
+### Conteúdo Episódico (Séries, Animes e Cursos)
 
 ```
-📁 Filmes/
-   ├── Interestelar (2014).mkv
-   ├── Matrix (1999).mp4
-   └── O Poderoso Chefao.avi
+Séries/
+└── Breaking Bad/
+    ├── Temporada 01/
+    │   ├── Breaking Bad S01E01.mkv
+    │   ├── Breaking Bad S01E02.mkv
+    │   └── ...
+    └── Temporada 02/
+        ├── Breaking Bad S02E01.mkv
+        └── ...
+```
+
+**Padrões de nomenclatura reconhecidos:**
+- `S01E02` ou `s1e2`
+- `1x05` ou `01x05`
+- `Episódio 03`, `Ep 03`, `Capitulo 12`, `Parte 2`
+- Numeração sequencial no final do nome (`Nome 01.mp4`, `Nome 02.mp4`)
+
+### Filmes e Mídias Avulsas
+
+```
+Filmes/
+├── Interestelar (2014).mkv
+├── Matrix (1999).mp4
+└── O Poderoso Chefao.avi
 ```
 
 ---
 
-### 3. Equivalência Multi-HD (Pastas em Discos Diferentes)
-Se o seu catálogo estiver espalhado em vários discos rígidos ou SSDs:
-- **Disco D:** `D:\Midias\Filmes`
-- **Disco E:** `E:\Filmes_Antigos`
-- **Disco F:** `F:\Downloads\Filmes`
+## Atalhos de Teclado
 
-Basta abrir as **Configurações (⚙️)** no MediaFinder, ir na aba **"🏷️ Grupos de Mídia"**, selecionar o grupo **Filmes** e adicionar essas 3 pastas. O MediaFinder e o Modo TV passarão a tratá-las como uma única coleção unificada!
-
----
-
-## ⌨️ Atalhos de Teclado Úteis
-
-### 🔍 Buscador Principal
+### Interface Principal
 | Atalho | Ação |
 |---|---|
-| `Ctrl + F` ou `F3` | Focar na barra de pesquisa |
-| `F4` ou `Ctrl + R` | Sorteio do **Modo Aleatório Rápido** |
-| `F8` ou `Ctrl + T` | Abrir o **Modo TV (Canais ao Vivo)** |
-| `Delete` | Excluir arquivos selecionados do disco |
-| `Ctrl + A` | Selecionar todos os arquivos da lista |
-| `Ctrl + P` | Ocultar / Mostrar painel de prévia |
+| `Ctrl + F` / `F3` | Focar no campo de busca |
+| `F4` / `Ctrl + R` | Executar sorteio aleatório |
+| `F8` / `Ctrl + T` | Abrir janela do Modo TV |
+| `Ctrl + P` | Alternar exibição do painel de prévia |
+| `Ctrl + A` | Selecionar todos os itens da tabela |
 | `Enter` | Abrir arquivo no reprodutor padrão |
-| `F5` | Reindexar / Atualizar mídias dos discos |
+| `Delete` | Excluir arquivos selecionados |
+| `F5` | Atualizar e reindexar diretórios |
 
-### 📺 Janela do Modo TV
-| Tecla / Botão | Ação no Modo TV |
+### Janela do Modo TV
+| Atalho | Ação |
 |---|---|
-| `←` / `→` ou `Page Up/Down` | Trocar de canal (`CH-` / `CH+`) com transição suave |
-| `↑` / `↓` ou `+` / `-` | Ajustar volume (+/- 5%) com barras retrô vintage |
+| `←` / `→` ou `Page Up/Down` | Trocar de canal (`CH-` / `CH+`) |
+| `↑` / `↓` ou `+` / `-` | Ajustar volume (+/- 5%) |
 | `1` a `9` | Sintonizar canal diretamente pelo número |
-| `Espaço` / `Play / Pause` | Pausar / Continuar reprodução |
-| `C` | Abrir **Gerenciador de Canais & Pastas** |
-| `R` ou `F5` | Gerar uma nova grade de 24h aleatória |
-| `A` | Alternar faixa de áudio (**Dual Áudio**) |
-| `S` ou `L` | Alternar faixas de legendas embutidas |
-| `G` ou `Tab` | Ocultar / Mostrar grade lateral de programação |
-| `F` ou `F11` | Alternar Tela Cheia |
-| `Esc` | Sair da Tela Cheia / Fechar TV |
+| `Espaço` | Alternar Reprodução / Pausa |
+| `C` | Abrir gerenciador de canais |
+| `A` | Alternar faixa de áudio (Dual Áudio) |
+| `S` / `L` | Alternar faixa de legendas |
+| `G` / `Tab` | Alternar exibição da grade de programação |
+| `F` / `F11` | Alternar modo tela cheia |
+| `Esc` | Sair do modo tela cheia / fechar TV |
 
 ---
 
-## 🚀 Como Executar
+## Instalação e Execução
 
-### Opção 1: Executável Portátil Standalone (.exe)
-Basta executar o arquivo gerado:
+### Opção 1: Executável Portátil (Windows)
+Baixe a versão compilada diretamente na página de [Releases](https://github.com/xToshiro/MediaFinder/releases). Não requer instalação prévia do Python ou de bibliotecas externas.
+
+### Opção 2: Execução a partir do Código-Fonte
+
+1. Clone o repositório:
 ```bash
-dist\MediaFinder.exe
+git clone https://github.com/xToshiro/MediaFinder.git
+cd MediaFinder
 ```
-*(Não precisa de Python instalado)*
 
-### Opção 2: Pelo Código Python
-1. Instale as dependências:
-   ```bash
-   pip install -r requirements.txt
-   ```
-2. Execute o script principal ou dê duplo clique em `iniciar.bat`:
-   ```bash
-   python main.py
-   ```
+2. Instale as dependências:
+```bash
+pip install -r requirements.txt
+```
 
-### Para Recriar o Executável (.exe)
+3. Inicie a aplicação:
+```bash
+python main.py
+```
+
+### Compilação do Executável
+
+Para compilar o binário localmente utilizando o PyInstaller:
 ```bash
 python build_exe.py
 ```
-O executável `.exe` será gerado automaticamente na pasta `dist/`.
+O executável standalone será gerado no diretório `dist/MediaFinder.exe`.
 
 ---
 
-## 🛠️ Tecnologias
-- **Interface**: PySide6 (Qt 6) com Dark Theme moderno e responsivo.
-- **Engine de Busca**: SQLite com modo WAL, índices de alta performance e FTS5.
-- **Processamento de Miniaturas**: Pillow (PIL) com cache assíncrono.
-- **Player Multimídia**: QtMultimedia com aceleração por hardware e suporte a streams multi-áudio/legendas.
-- **Empacotador**: PyInstaller.
+## Arquitetura e Tecnologias
+
+- **Linguagem**: Python 3.10+
+- **Interface Gráfica**: PySide6 (Qt 6.7+)
+- **Banco de Dados**: SQLite com WAL (Write-Ahead Logging) e FTS5 (Full-Text Search)
+- **Manipulação de Imagens**: Pillow (PIL)
+- **Executável Windows**: PyInstaller
+
+---
+
+## Licença
+
+Este projeto está licenciado sob os termos da licença GNU General Public License v3.0 (GPLv3). Consulte o arquivo [LICENSE](LICENSE) para obter mais informações.
