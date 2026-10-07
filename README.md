@@ -1,78 +1,72 @@
 # MediaFinder
 
-Buscador de arquivos e gerenciador multimídia desktop de alta performance desenvolvido em Python e Qt (PySide6), projetado para indexar, consultar e reproduzir coleções distribuídas em múltiplos discos rígidos, SSDs, unidades externas e diretórios montados no Windows.
+Aplicativo desktop para Windows desenvolvido em Python e Qt (PySide6) que ajuda a localizar, organizar e reproduzir arquivos de mídia (vídeos, fotos, músicas e documentos) distribuídos em diferentes pastas, discos rígidos, SSDs ou unidades montadas.
 
 ---
 
-## Funcionalidades
+## Recursos
 
-### Mecanismo de Busca e Indexação
-- **Busca em Tempo Real**: Consulta instantânea com debounce de 150ms utilizando SQLite FTS5 (`unicode61`) e índices compostos.
-- **Varredura Assíncrona**: Scanner em thread dedicada (`QThread`) sem congelamento da interface gráfica.
-- **Histórico e Persistência**: Restauração automática de filtros, termos de pesquisa e histórico recente.
+### Busca e Indexação
+- **Busca por texto**: Consulta arquivos pelo nome utilizando banco de dados SQLite com suporte a busca textual (FTS5).
+- **Varredura em segundo plano**: A indexação das pastas ocorre sem travar a interface do programa.
+- **Histórico e preferências**: Salva as últimas pastas utilizadas, termos de pesquisa e filtros selecionados.
 
 ### Filtros e Agrupamentos
-- **Filtragem por Categoria**: Vídeos, Imagens, Áudios e Documentos com contadores dinâmicos.
-- **Isolamento por Unidade**: Filtragem por letra de unidade ou pesquisa unificada em todas as fontes monitoradas.
-- **Grupos de Mídia**: Criação de equivalências entre diretórios de discos distintos (ex.: unificação de pastas em múltiplas unidades sob a categoria "Filmes").
-- **Ordenação Multi-critério**: Ordenação por nome, tamanho e data de modificação.
+- **Categorias**: Filtros rápidos para Vídeos, Imagens, Áudios e Documentos.
+- **Filtro por unidade**: Opção para pesquisar em uma unidade específica ou em todas ao mesmo tempo.
+- **Grupos de mídia**: Permite agrupar pastas de locais diferentes sob uma mesma categoria (por exemplo, reunir pastas de filmes que estejam em discos separados).
+- **Ordenação**: Ordenação por nome, tamanho de arquivo e data de modificação.
 
-### Modo TV e Transmissão Contínua
-- **Player Integrado**: Reprodução contínua 24h em janela independente desacoplada.
-- **Ordem Cronológica ou Aleatória**:
-  - *Sequencial*: Ordenação cronológica rigorosa para séries e animes (`S01E01`, `S01E02`...).
-  - *Aleatório (Shuffle)*: Distribuição pseudo-aleatória sem repetições consecutivas.
-- **Sincronização Dinâmica**: Ajuste automático da grade de programação baseado na duração real dos arquivos.
-- **Controles Multimídia**: Alternância de trilhas de áudio (Dual Áudio), legendas embutidas e controle de volume.
+### Modo TV
+- **Reprodução contínua**: Janela de reprodução de vídeo contínua com suporte a canais.
+- **Ordem de reprodução**:
+  - *Sequencial*: Reproduz episódios em ordem cronológica (ex.: `S01E01`, `S01E02`).
+  - *Aleatório*: Sorteia itens sem repetir o mesmo arquivo em sequência.
+- **Grade de programação**: Lista os próximos itens previstos com base na duração dos vídeos.
+- **Controles**: Troca de canais, ajuste de volume e alternância de faixas de áudio e legendas.
 
-### Painel de Pré-Visualização e Utilitários
-- **Prévia Integrada**: Renderização assíncrona de miniaturas para imagens e leitura rápida de metadados e arquivos de texto (`.txt`, `.nfo`, `.srt`, `.json`).
-- **Integração com Windows Explorer**: Abertura no player padrão do sistema ou localização direta via `explorer /select`.
-- **Modo Aleatório Rápido**: Sorteio instantâneo de mídias por atalho de teclado (`F4`).
-- **Gerenciamento de Arquivos**: Exclusão física com exibição detalhada do espaço em disco a ser liberado.
-
----
-
-## Guia Rápido de Uso
-
-### 1. Configurando Pastas e Fontes Monitoradas
-1. Na janela principal, clique no botão **Pastas** (`⚙️ Pastas`) no topo superior direito.
-2. Na aba **Pastas & Unidades Monitoradas**, clique em **Adicionar Pasta / Unidade...** e selecione os diretórios raiz ou pontos de montagem desejados (ex.: `D:\Midias`, `E:\`, `\\Servidor\Midias`).
-3. O MediaFinder iniciará a varredura recursiva em segundo plano. Para forçar uma nova varredura completa a qualquer momento, clique em **Reindexar Tudo Agora** (ou pressione `F5`).
-
-### 2. Pesquisando e Filtrando Mídias
-- **Busca por Nome**: Digite qualquer termo na barra de pesquisa superior. A consulta é executada instantaneamente enquanto você digita.
-- **Chips de Categoria**: Filtre rapidamente por tipo de arquivo clicando em *Vídeos*, *Imagens*, *Áudios* ou *Documentos*.
-- **Unidade / Origem**: Utilize o seletor suspenso para isolar a busca em uma unidade específica (ex.: `Drive E:`) ou manter a busca global em `Todas as Unidades`.
-- **Painel de Prévia**: Pressione `Ctrl + P` para abrir o painel lateral com metadados, dimensões/resolução e miniatura da mídia selecionada.
-
-### 3. Criando Categorias e Equivalências (Multi-Unidades)
-Caso seus arquivos estejam distribuídos em diferentes discos ou diretórios:
-1. Abra **Configurações** (`⚙️ Pastas`) e acesse a aba **Grupos de Mídia & Categorias**.
-2. Selecione ou crie um grupo (ex.: `Filmes`, `Séries`, `Cursos`).
-3. Adicione as pastas correspondentes de cada unidade (ex.: `D:\Filmes`, `E:\Cinema_4K`, `F:\Downloads\Filmes`).
-4. Essas pastas passarão a ser tratadas como uma coleção única, tanto na filtragem quanto na grade do Modo TV.
-
-### 4. Utilizando o Modo TV
-1. Pressione `F8` (ou `Ctrl + T`) para abrir a janela desacoplada do Modo TV.
-2. Navegue pelos canais usando as teclas `←` / `→` ou os números de `1` a `9`.
-3. Pressione a tecla **C** para abrir o **Gerenciador de Canais**, onde é possível:
-   - Criar e renomear canais temáticos.
-   - Vincular grupos de mídia ou subpastas específicas.
-   - Definir o modo de transmissão: **Aleatório (Shuffle)** para filmes/variedades ou **Sequencial** para séries/animes.
-4. Ajuste o volume com `↑` / `↓`, alterne faixas de áudio com `A` e ative legendas com `S` ou `L`.
-
-### 5. Sorteio Rápido e Gerenciamento
-- **Sorteio Instantâneo**: Pressione `F4` (ou `Ctrl + R`) para sortear e abrir imediatamente uma mídia aleatória respeitando a categoria atualmente filtrada.
-- **Exclusão de Arquivos**: Selecione um ou mais itens na tabela de resultados e pressione `Delete` para excluí-los fisicamente do disco com confirmação do espaço total liberado.
+### Pré-Visualização e Utilitários
+- **Painel lateral de prévia**: Exibe detalhes do arquivo, dimensões de imagens e trecho de arquivos de texto (`.txt`, `.nfo`, `.srt`).
+- **Ações no sistema**: Atalho para abrir o arquivo no reprodutor padrão ou localizá-lo no Windows Explorer.
+- **Sorteio rápido**: Abre uma mídia aleatória a partir de um atalho (`F4`).
+- **Exclusão de arquivos**: Permite remover arquivos do disco com janela de confirmação.
 
 ---
 
-## Organização de Pastas e Boas Práticas
+## Guia de Uso
 
-O mecanismo de busca do MediaFinder é recursivo e analisa todos os níveis de subpastas automaticamente. Para obter o melhor aproveitamento dos recursos de ordenação e detecção do Modo TV, recomenda-se a seguinte estrutura:
+### 1. Adicionar pastas para monitoramento
+1. Clique no botão **Pastas** no canto superior direito.
+2. Na aba **Pastas & Unidades Monitoradas**, clique em **Adicionar Pasta / Unidade...** e escolha os diretórios que contêm seus arquivos.
+3. Para atualizar a lista de arquivos a qualquer momento, clique em **Reindexar Tudo Agora** (ou pressione `F5`).
 
-### 1. Conteúdo Episódico (Séries, Animes, Desenhos e Cursos)
+### 2. Pesquisar e filtrar
+- Digite o nome do arquivo no campo de busca.
+- Use os botões de categoria (*Vídeos*, *Imagens*, etc.) ou o seletor de unidade para refinar o resultado.
+- Pressione `Ctrl + P` para abrir ou fechar o painel de detalhes e prévia lateral.
+
+### 3. Agrupar pastas de locais diferentes
+Se você possui arquivos do mesmo tipo espalhados por vários discos:
+1. Abra o menu **Pastas** e vá para a aba **Grupos de Mídia & Categorias**.
+2. Selecione ou crie um grupo (ex.: `Filmes`).
+3. Adicione os caminhos das pastas de cada disco (ex.: `D:\Filmes`, `E:\Cinema`, `F:\Downloads\Filmes`).
+4. Essas pastas serão tratadas de forma unificada nas buscas e nos canais de TV.
+
+### 4. Usar o Modo TV
+1. Pressione `F8` (ou `Ctrl + T`) para abrir a janela da TV.
+2. Troque de canal pelas setas `←` / `→` ou digitando o número do canal (`1` a `9`).
+3. Pressione a tecla `C` para abrir o gerenciador de canais, onde você pode:
+   - Adicionar canais e associá-los a pastas ou grupos de mídia.
+   - Definir se a reprodução deve ser sequencial (para séries) ou aleatória (para filmes e clipes).
+4. Use as setas `↑` / `↓` para volume, `A` para faixas de áudio e `S` ou `L` para legendas.
+
+---
+
+## Sugestões de Organização de Arquivos
+
+O aplicativo varre subpastas em qualquer nível de profundidade. Para facilitar a identificação de séries e episódios no Modo TV, recomenda-se uma organização simples:
+
+### Séries e Conteúdo Episódico
 
 ```
 Séries/
@@ -86,14 +80,14 @@ Séries/
         └── ...
 ```
 
-**Padrões de nomenclatura reconhecidos automaticamente:**
-- Códigos de temporada e episódio: `S01E02`, `s1e2`, `1x05`, `01x05`
-- Textos descritivos: `Episódio 03`, `Ep 03`, `Capitulo 12`, `Parte 2`
-- Numeração sequencial no final do arquivo: `Naruto 01.mp4`, `Curso_Modulo 02.mp4`
+Padrões de nomes identificados automaticamente:
+- `S01E02`, `s1e2`, `1x05`, `01x05`
+- `Episódio 03`, `Ep 03`, `Capitulo 12`, `Parte 2`
+- Numeração simples ao final do arquivo (`Nome 01.mp4`, `Nome 02.mp4`)
 
-### 2. Filmes e Mídias Avulsas
+### Filmes
 
-O MediaFinder suporta tanto arquivos soltos na raiz quanto filmes organizados em subpastas individuais com legendas ou extras:
+Filmes podem ficar soltos na pasta principal, divididos por categorias/gêneros ou em subpastas individuais com arquivos de legenda:
 
 ```
 Filmes/
@@ -101,11 +95,9 @@ Filmes/
 │   ├── Interestelar (2014).mkv
 │   └── Interestelar (2014).srt
 ├── Matrix (1999)/
-│   ├── Matrix (1999).mp4
-│   └── poster.jpg
-├── Ficção Científica/
-│   ├── Blade Runner 2049 (2017).mkv
-│   └── A Chegada (2016).mkv
+│   └── Matrix (1999).mp4
+├── Ficção/
+│   └── Blade Runner 2049 (2017).mkv
 └── O Poderoso Chefao.avi
 ```
 
@@ -113,40 +105,40 @@ Filmes/
 
 ## Atalhos de Teclado
 
-### Interface Principal
+### Janela Principal
 | Atalho | Ação |
 |---|---|
 | `Ctrl + F` / `F3` | Focar no campo de busca |
-| `F4` / `Ctrl + R` | Executar sorteio aleatório |
-| `F8` / `Ctrl + T` | Abrir janela do Modo TV |
-| `Ctrl + P` | Alternar exibição do painel de prévia |
-| `Ctrl + A` | Selecionar todos os itens da tabela |
+| `F4` / `Ctrl + R` | Sorteio aleatório de mídia |
+| `F8` / `Ctrl + T` | Abrir o Modo TV |
+| `Ctrl + P` | Mostrar / ocultar painel de prévia |
+| `Ctrl + A` | Selecionar todos os arquivos da lista |
 | `Enter` | Abrir arquivo no reprodutor padrão |
 | `Delete` | Excluir arquivos selecionados |
-| `F5` | Atualizar e reindexar diretórios |
+| `F5` | Reindexar diretórios |
 
 ### Janela do Modo TV
 | Atalho | Ação |
 |---|---|
-| `←` / `→` ou `Page Up/Down` | Trocar de canal (`CH-` / `CH+`) |
-| `↑` / `↓` ou `+` / `-` | Ajustar volume (+/- 5%) |
-| `1` a `9` | Sintonizar canal diretamente pelo número |
-| `Espaço` | Alternar Reprodução / Pausa |
-| `C` | Abrir gerenciador de canais |
-| `A` | Alternar faixa de áudio (Dual Áudio) |
-| `S` / `L` | Alternar faixa de legendas |
-| `G` / `Tab` | Alternar exibição da grade de programação |
-| `F` / `F11` | Alternar modo tela cheia |
-| `Esc` | Sair do modo tela cheia / fechar TV |
+| `←` / `→` ou `Page Up/Down` | Trocar de canal |
+| `↑` / `↓` ou `+` / `-` | Ajustar volume |
+| `1` a `9` | Ir direto para o canal |
+| `Espaço` | Pausar / Continuar |
+| `C` | Gerenciar canais |
+| `A` | Alternar faixa de áudio |
+| `S` / `L` | Alternar legendas |
+| `G` / `Tab` | Mostrar / ocultar grade de programação |
+| `F` / `F11` | Tela cheia |
+| `Esc` | Sair de tela cheia ou fechar a janela |
 
 ---
 
 ## Instalação e Execução
 
-### Opção 1: Executável Portátil (Windows)
-Baixe a versão compilada diretamente na página de [Releases](https://github.com/xToshiro/MediaFinder/releases). Não requer instalação prévia do Python ou de dependências externas.
+### Executável (Windows)
+Baixe o arquivo `MediaFinder.exe` na aba de [Releases](https://github.com/xToshiro/MediaFinder/releases). Não é necessário instalar Python nem configurar dependências.
 
-### Opção 2: Execução a partir do Código-Fonte
+### A partir do Código-Fonte
 
 1. Clone o repositório:
 ```bash
@@ -159,31 +151,31 @@ cd MediaFinder
 pip install -r requirements.txt
 ```
 
-3. Inicie a aplicação:
+3. Execute:
 ```bash
 python main.py
 ```
 
-### Compilação do Executável
+### Gerar o Executável
 
-Para compilar o binário localmente utilizando o PyInstaller:
+Para compilar o `.exe` localmente:
 ```bash
 python build_exe.py
 ```
-O executável standalone será gerado no diretório `dist/MediaFinder.exe`.
+O arquivo será criado na pasta `dist/MediaFinder.exe`.
 
 ---
 
-## Arquitetura e Tecnologias
+## Tecnologias Utilizadas
 
 - **Linguagem**: Python 3.10+
-- **Interface Gráfica**: PySide6 (Qt 6.7+)
-- **Banco de Dados**: SQLite com WAL (Write-Ahead Logging) e FTS5 (Full-Text Search)
-- **Manipulação de Imagens**: Pillow (PIL)
-- **Executável Windows**: PyInstaller
+- **Interface**: PySide6 (Qt 6)
+- **Banco de Dados**: SQLite (FTS5)
+- **Imagens**: Pillow (PIL)
+- **Empacotamento**: PyInstaller
 
 ---
 
 ## Licença
 
-Este projeto está licenciado sob os termos da licença GNU General Public License v3.0 (GPLv3). Consulte o arquivo [LICENSE](LICENSE) para obter mais informações.
+Distribuído sob a licença GNU General Public License v3.0 (GPLv3). Consulte o arquivo [LICENSE](LICENSE) para mais detalhes.
