@@ -7,74 +7,6 @@ from typing import List, Dict, Any, Optional, Tuple
 class AppConfig:
     """Gerencia o salvamento e carregamento de configurações e histórico do usuário."""
 
-    @staticmethod
-    def _get_platform_defaults() -> Tuple[List[str], Dict[str, List[str]]]:
-        if sys.platform == "win32":
-            watched = [r"E:\Midias", r"F:\Midias", r"H:\Midias"]
-            groups = {
-                "Filmes": [r"E:\Midias\Filmes", r"F:\Midias\Filmes", r"H:\Midias\Filmes"],
-                "Séries": [r"E:\Midias\Series", r"F:\Midias\Series"],
-                "Desenhos": [r"E:\Midias\Desenhos", r"F:\Midias\Desenhos"],
-                "Animes": [r"E:\Midias\Animes", r"F:\Midias\Animes"],
-                "Documentários": [r"E:\Midias\Documentarios", r"F:\Midias\Documentarios"],
-                "Músicas": [r"E:\Midias\Musicas", r"F:\Midias\Musicas", r"H:\Midias\Musicas"]
-            }
-            return watched, groups
-
-        home = Path.home()
-        user = home.name
-        watched = []
-        groups = {
-            "Filmes": [],
-            "Séries": [],
-            "Desenhos": [],
-            "Animes": [],
-            "Documentários": [],
-            "Músicas": []
-        }
-
-        # Pastas multimídia no Home do usuário
-        for folder_name in ["Vídeos", "Videos", "Músicas", "Music", "Imagens", "Pictures"]:
-            p = home / folder_name
-            if p.exists():
-                watched.append(str(p))
-
-        # Discos e pontos de montagem no Linux / Regata OS
-        search_roots = []
-        for media_base in [Path(f"/run/media/{user}"), Path(f"/media/{user}"), Path("/media")]:
-            if media_base.exists():
-                for m in media_base.iterdir():
-                    if m.is_dir() and not m.name.startswith("."):
-                        search_roots.append(m)
-
-        for root in search_roots:
-            for candidate_dir in [root, root / "Arquivos" / "multimidia", root / "multimidia", root / "Midias", root / "Mídias"]:
-                if candidate_dir.exists():
-                    watched.append(str(candidate_dir))
-                    for sub in ["Filmes", "filmes", "Movies"]:
-                        if (candidate_dir / sub).exists():
-                            groups["Filmes"].append(str(candidate_dir / sub))
-                    for sub in ["Séries", "series", "Series", "serie"]:
-                        if (candidate_dir / sub).exists():
-                            groups["Séries"].append(str(candidate_dir / sub))
-                    for sub in ["Desenhos", "desenhos", "Cartoons"]:
-                        if (candidate_dir / sub).exists():
-                            groups["Desenhos"].append(str(candidate_dir / sub))
-                    for sub in ["Animes", "animes", "Anime"]:
-                        if (candidate_dir / sub).exists():
-                            groups["Animes"].append(str(candidate_dir / sub))
-                    for sub in ["Documentários", "documentarios", "Docs"]:
-                        if (candidate_dir / sub).exists():
-                            groups["Documentários"].append(str(candidate_dir / sub))
-                    for sub in ["Músicas", "musicas", "Music"]:
-                        if (candidate_dir / sub).exists():
-                            groups["Músicas"].append(str(candidate_dir / sub))
-
-        watched = list(dict.fromkeys(watched))
-        if not watched:
-            watched = [str(home)]
-        return watched, groups
-
     def __init__(self):
         # Diretório de configuração: XDG em Linux (~/.config/MediaFinder) e AppData em Windows
         if sys.platform == "win32":
@@ -84,12 +16,18 @@ class AppConfig:
         self.config_dir = Path(base_dir) / "MediaFinder"
         self.config_dir.mkdir(parents=True, exist_ok=True)
         self.config_file = self.config_dir / "config.json"
-        
-        default_watched, default_groups = self._get_platform_defaults()
 
         self.default_config: Dict[str, Any] = {
-            "watched_folders": default_watched,
-            "media_folder_groups": default_groups,
+            "watched_folders": [],  # Somente diretórios explicitamente indicados pelo usuário
+            "media_folder_groups": {
+                "Filmes": [],
+                "Séries": [],
+                "Desenhos": [],
+                "Animes": [],
+                "Documentários": [],
+                "Músicas": []
+            },
+
 
             "last_search_query": "",
             "last_category_filter": "all",

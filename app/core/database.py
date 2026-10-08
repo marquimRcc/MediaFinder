@@ -168,6 +168,23 @@ class MediaDatabase:
             conn.commit()
             return deleted_count
 
+    def remove_folder_records(self, folder_path: str) -> int:
+        """Remove do banco todos os arquivos que pertencem a uma pasta desmarcada/removida."""
+        if not folder_path:
+            return 0
+        norm_root = os.path.normpath(folder_path)
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM files WHERE path LIKE ?", (f"{norm_root}%",))
+            deleted_count = cursor.rowcount
+            try:
+                cursor.execute("DELETE FROM files_fts WHERE path LIKE ?", (f"{norm_root}%",))
+            except Exception:
+                pass
+            conn.commit()
+            return deleted_count
+
+
     def search_files(
         self,
         query: str = "",

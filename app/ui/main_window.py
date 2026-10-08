@@ -5,7 +5,7 @@ from typing import Optional, List, Dict, Any
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QLabel, QPushButton, QProgressBar, QStatusBar, QMessageBox, QApplication,
-    QMenu, QSystemTrayIcon, QStyle
+    QMenu, QSystemTrayIcon, QStyle, QFrame
 )
 from PySide6.QtCore import Qt, QTimer, QSize, QPoint
 from PySide6.QtGui import QIcon, QKeySequence, QShortcut, QAction
@@ -116,8 +116,37 @@ class MainWindow(QMainWindow):
         self.filter_bar.filters_changed.connect(self._on_filters_changed)
         main_layout.addWidget(self.filter_bar)
 
+        # Banner de aviso quando nenhuma pasta estiver configurada
+        self.banner_no_folders = QFrame()
+        self.banner_no_folders.setStyleSheet("""
+            QFrame {
+                background-color: #141E2F;
+                border: 1px solid #2563EB;
+                border-radius: 8px;
+                padding: 6px 12px;
+            }
+        """)
+        banner_layout = QHBoxLayout(self.banner_no_folders)
+        banner_layout.setContentsMargins(8, 4, 8, 4)
+        lbl_banner_icon = QLabel("📁")
+        lbl_banner_icon.setStyleSheet("font-size: 16px;")
+        banner_layout.addWidget(lbl_banner_icon)
+
+        lbl_banner_text = QLabel("Nenhuma pasta configurada. O MediaFinder indexará exclusivamente os diretórios que você indicar.")
+        lbl_banner_text.setStyleSheet("color: #E2E8F0; font-size: 12px; font-weight: 500;")
+        banner_layout.addWidget(lbl_banner_text, 1)
+
+        btn_banner_add = QPushButton("➕ Selecionar Pastas...")
+        btn_banner_add.setObjectName("primary_action_btn")
+        btn_banner_add.setStyleSheet("padding: 5px 12px; font-size: 12px;")
+        btn_banner_add.clicked.connect(self._open_settings)
+        banner_layout.addWidget(btn_banner_add)
+
+        main_layout.addWidget(self.banner_no_folders)
+
         self.splitter = QSplitter(Qt.Horizontal)
         self.splitter.setHandleWidth(6)
+
         self.splitter.setChildrenCollapsible(True)
 
         self.results_table = ResultsTableView()
@@ -241,11 +270,16 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+T"), self, activated=self._open_tv_mode)
 
     def _restore_previous_state(self):
+        self._update_folders_state()
         self._update_drives_list()
         self.filter_bar.set_category(self._current_category)
         self.filter_bar.set_drive(self._current_drive)
         self.search_bar.set_text(self._current_query)
         self.perform_search()
+
+    def _update_folders_state(self):
+        folders = self.config.get_watched_folders()
+        self.banner_no_folders.setVisible(len(folders) == 0)
 
     def _update_drives_list(self):
         stats = self.db.get_stats()
@@ -274,6 +308,13 @@ class MainWindow(QMainWindow):
         self.config.set("preview_visible", visible)
 
     def perform_search(self):
+        folders = self.config.get_watched_folders()
+        if not folders:
+            self.results_table.set_results([])
+            self.lbl_status_results.setText("Nenhuma pasta configurada. Clique em '➕ Selecionar Pastas...' para começar.")
+            self.preview_panel.set_file_data(None)
+            return
+
         files, total_count, total_size = self.db.search_files(
             query=self._current_query,
             category=self._current_category,
@@ -295,6 +336,7 @@ class MainWindow(QMainWindow):
 
         if not files:
             self.preview_panel.set_file_data(None)
+
 
     def _on_item_selected(self, file_data: dict):
         self.preview_panel.set_file_data(file_data)
@@ -379,9 +421,11 @@ class MainWindow(QMainWindow):
             return
 
         folders = self.config.get_watched_folders()
+        self._update_folders_state()
         if not folders:
             self.scan_progress_bar.setVisible(False)
             self.lbl_scan_status.setText("")
+            self.lbl_status_results.setText("Nenhuma pasta configurada. Clique em '⚙️ Pastas' para indicar seus diretórios.")
             return
 
         self.scan_progress_bar.setVisible(True)
@@ -414,6 +458,7 @@ class MainWindow(QMainWindow):
             f"Varredura concluída: {total_indexed:,} arquivos processados em {elapsed:.1f}s (Total no catálogo: {total_files:,} mídias)."
         )
         self._update_drives_list()
+        self._update_folders_state()
         self.perform_search()
 
         if hasattr(self, 'search_bar') and hasattr(self.search_bar, 'btn_reindex'):
@@ -426,8 +471,11 @@ class MainWindow(QMainWindow):
         dialog = SettingsDialog(self.config, self.db, default_tab=0, parent=self)
         if dialog.exec():
             self._update_drives_list()
+            self._update_folders_state()
             self.perform_search()
-            self.start_indexing()
+            if self.config.get_watched_folders():
+                self.start_indexing()
+
 
     def _open_about(self):
         dialog = SettingsDialog(self.config, self.db, default_tab=2, parent=self)
