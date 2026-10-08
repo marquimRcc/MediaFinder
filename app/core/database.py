@@ -1,4 +1,5 @@
 import os
+import sys
 import sqlite3
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
@@ -8,14 +9,35 @@ class MediaDatabase:
 
     def __init__(self, db_path: Optional[str] = None):
         if db_path is None:
-            appdata = os.getenv("APPDATA") or str(Path.home())
-            db_dir = Path(appdata) / "MediaFinder"
+            if sys.platform == "win32":
+                base_dir = os.getenv("APPDATA") or str(Path.home())
+            else:
+                base_dir = os.getenv("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+            db_dir = Path(base_dir) / "MediaFinder"
             db_dir.mkdir(parents=True, exist_ok=True)
             self.db_path = str(db_dir / "media_index.db")
         else:
             self.db_path = db_path
 
         self._init_db()
+
+    @staticmethod
+    def _clean_drive_param(drive: str) -> str:
+        """Limpa e formata o parâmetro de drive de forma compatível com Windows e Linux."""
+        if not drive or drive.lower() == "all":
+            return ""
+        if sys.platform == "win32":
+            drive_clean = drive.upper()
+            if not drive_clean.endswith(":"):
+                drive_clean += ":"
+            return drive_clean
+        # Linux / Regata OS: preserva nome do ponto de montagem ou letra
+        if len(drive) == 1 and drive.isalpha():
+            return drive.upper() + ":"
+        elif len(drive) == 2 and drive[1] == ":" and drive[0].isalpha():
+            return drive.upper()
+        return drive
+
 
     def _get_connection(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, timeout=30.0)
@@ -169,12 +191,11 @@ class MediaDatabase:
                 params.append(category.lower())
 
             # 2. Filtro por Drive
-            if drive and drive.lower() != "all":
-                drive_clean = drive.upper()
-                if not drive_clean.endswith(":"):
-                    drive_clean += ":"
+            drive_clean = self._clean_drive_param(drive)
+            if drive_clean:
                 where_clauses.append("f.drive = ?")
                 params.append(drive_clean)
+
 
             # 3. Filtro por Query (FTS5 ou LIKE para correspondência parcial flexível)
             use_fts = False
@@ -257,10 +278,8 @@ class MediaDatabase:
                     where_clauses.append(f"({' OR '.join(folder_clauses)})")
 
             # Filtro por Drive
-            if drive and drive.lower() != "all":
-                drive_clean = drive.upper()
-                if not drive_clean.endswith(":"):
-                    drive_clean += ":"
+            drive_clean = self._clean_drive_param(drive)
+            if drive_clean:
                 where_clauses.append("f.drive = ?")
                 params.append(drive_clean)
 
@@ -318,12 +337,11 @@ class MediaDatabase:
                     where_clauses.append(f"({' OR '.join(folder_clauses)})")
 
             # Filtro por Drive
-            if drive and drive.lower() != "all":
-                drive_clean = drive.upper()
-                if not drive_clean.endswith(":"):
-                    drive_clean += ":"
+            drive_clean = self._clean_drive_param(drive)
+            if drive_clean:
                 where_clauses.append("f.drive = ?")
                 params.append(drive_clean)
+
 
             where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
 

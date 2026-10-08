@@ -1,5 +1,7 @@
 import os
+import sys
 from typing import List, Dict, Any, Optional
+
 from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QMenu,
     QAbstractItemView, QApplication, QMessageBox
@@ -201,7 +203,8 @@ class ResultsTableView(QTableWidget):
             act_open = menu.addAction("🚀 Abrir Arquivo")
             act_open.triggered.connect(lambda: open_file(f.get("path", "")))
 
-            act_explorer = menu.addAction("📂 Localizar no Windows Explorer")
+            expl_label = "📂 Localizar no Windows Explorer" if sys.platform == "win32" else "📂 Localizar no Gerenciador de Arquivos"
+            act_explorer = menu.addAction(expl_label)
             act_explorer.triggered.connect(lambda: reveal_in_explorer(f.get("path", "")))
 
             menu.addSeparator()
@@ -223,8 +226,10 @@ class ResultsTableView(QTableWidget):
             act_open_all = menu.addAction(f"🚀 Abrir Selecionados ({count} arquivos)")
             act_open_all.triggered.connect(lambda: [open_file(sf.get("path", "")) for sf in selected_files])
 
-            act_explorer_first = menu.addAction("📂 Localizar 1º no Explorer")
+            expl_first_label = "📂 Localizar 1º no Explorer" if sys.platform == "win32" else "📂 Localizar 1º no Gerenciador"
+            act_explorer_first = menu.addAction(expl_first_label)
             act_explorer_first.triggered.connect(lambda: reveal_in_explorer(selected_files[0].get("path", "")))
+
 
             menu.addSeparator()
 

@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 from typing import Dict, Any, Optional
 from PIL import Image
@@ -12,6 +13,7 @@ from PySide6.QtGui import QPixmap, QImage, QClipboard
 
 from app.utils.system_ops import open_file, reveal_in_explorer
 from app.utils.media_helpers import format_file_size, format_timestamp
+
 
 class ImageLoaderThread(QThread):
     """Carrega miniaturas de imagens em segundo plano."""
@@ -176,11 +178,13 @@ class PreviewPanel(QFrame):
         self.btn_open.clicked.connect(self._on_open_file)
         actions_layout.addWidget(self.btn_open)
 
-        self.btn_explorer = QPushButton("📂 Localizar no Explorer")
+        expl_btn_label = "📂 Localizar no Explorer" if sys.platform == "win32" else "📂 Localizar na Pasta"
+        self.btn_explorer = QPushButton(expl_btn_label)
         self.btn_explorer.setObjectName("explorer_action_btn")
         self.btn_explorer.setEnabled(False)
         self.btn_explorer.clicked.connect(self._on_reveal_explorer)
         actions_layout.addWidget(self.btn_explorer)
+
 
         copy_layout = QHBoxLayout()
         copy_layout.setSpacing(6)
@@ -319,7 +323,9 @@ class PreviewPanel(QFrame):
         if self.current_file_data:
             path = self.current_file_data.get("path", "")
             if not reveal_in_explorer(path):
-                QMessageBox.warning(self, "Aviso", f"Não foi possível localizar o arquivo no Explorer:\n{path}")
+                dest_name = "no Explorer" if sys.platform == "win32" else "no gerenciador de arquivos"
+                QMessageBox.warning(self, "Aviso", f"Não foi possível localizar o arquivo {dest_name}:\n{path}")
+
 
     def _on_copy_path(self):
         if self.current_file_data:
