@@ -4,6 +4,9 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from PIL import Image
 
+# Limite de segurança de descompressão de pixels para evitar DoS/OOM por imagens maliciosas
+Image.MAX_IMAGE_PIXELS = 80_000_000
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QScrollArea, QApplication, QMessageBox
@@ -16,7 +19,7 @@ from app.utils.media_helpers import format_file_size, format_timestamp
 
 
 class ImageLoaderThread(QThread):
-    """Carrega miniaturas de imagens em segundo plano."""
+    """Carrega miniaturas de imagens em segundo plano com proteções de segurança."""
     image_loaded = Signal(str, QPixmap, str) # (path, pixmap, resolution_str)
 
     def __init__(self, file_path: str, max_size: QSize, parent=None):
@@ -46,8 +49,10 @@ class ImageLoaderThread(QThread):
                 pixmap = QPixmap.fromImage(qimg)
                 
                 self.image_loaded.emit(self.file_path, pixmap, res_str)
-        except Exception as e:
-            # Fallback se falhar ao carregar via PIL
+        except (Image.DecompressionBombError, Image.DecompressionBombWarning):
+            # Imagem excede os limites de segurança de memória
+            pass
+        except Exception:
             pass
 
 class PreviewPanel(QFrame):

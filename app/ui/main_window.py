@@ -345,7 +345,7 @@ class MainWindow(QMainWindow):
         self.preview_panel.set_file_data(file_data)
 
     def _on_delete_files_requested(self, files: List[Dict[str, Any]]):
-        """Solicita confirmação e apaga permanentemente os arquivos selecionados do disco e do banco."""
+        """Solicita confirmação e move com segurança os arquivos selecionados para a Lixeira do SO."""
         if not files:
             return
 
@@ -356,11 +356,11 @@ class MainWindow(QMainWindow):
         if count == 1:
             f = files[0]
             msg = (
-                f"Tem certeza de que deseja EXCLUIR permanentemente do disco o arquivo:\n\n"
+                f"Deseja mover para a Lixeira do sistema o arquivo:\n\n"
                 f"📄 {f.get('name', '')}\n"
                 f"📁 Local: {f.get('path', '')}\n"
                 f"💾 Tamanho: {size_str}\n\n"
-                f"⚠️ ATENÇÃO: O arquivo será apagado fisicamente da pasta e não poderá ser recuperado!"
+                f"O arquivo poderá ser recuperado posteriormente na Lixeira caso necessário."
             )
         else:
             sample_names = "\n".join(f"• {f.get('name', '')}" for f in files[:5])
@@ -368,15 +368,15 @@ class MainWindow(QMainWindow):
                 sample_names += f"\n• ... e mais {count - 5} arquivo(s)"
 
             msg = (
-                f"Tem certeza de que deseja EXCLUIR permanentemente do disco os {count} arquivos selecionados?\n\n"
-                f"💾 Espaço total a ser liberado: {size_str}\n\n"
-                f"Arquivos a serem apagados:\n{sample_names}\n\n"
-                f"⚠️ ATENÇÃO: Os arquivos serão apagados fisicamente das pastas dos seus discos/unidades!"
+                f"Deseja mover para a Lixeira do sistema os {count} arquivos selecionados?\n\n"
+                f"💾 Espaço total: {size_str}\n\n"
+                f"Arquivos selecionados:\n{sample_names}\n\n"
+                f"Os arquivos poderão ser recuperados na Lixeira do sistema operacional."
             )
 
-        reply = QMessageBox.warning(
+        reply = QMessageBox.question(
             self,
-            "⚠️ Confirmar Exclusão Definitiva",
+            "🗑️ Confirmar Mover para Lixeira",
             msg,
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
@@ -394,11 +394,18 @@ class MainWindow(QMainWindow):
                 continue
             try:
                 if os.path.exists(path):
-                    if os.path.isdir(path):
-                        import shutil
-                        shutil.rmtree(path)
-                    else:
-                        os.remove(path)
+                    try:
+                        import send2trash
+                        send2trash.send2trash(path)
+                    except Exception:
+                        # Fallback se o sistema de arquivos não suportar lixeira (ex: FAT/exFAT/NFS)
+                        if os.path.islink(path):
+                            os.unlink(path)
+                        elif os.path.isdir(path):
+                            import shutil
+                            shutil.rmtree(path)
+                        else:
+                            os.remove(path)
                 deleted_paths.append(path)
             except Exception as e:
                 failed_files.append((f.get("name", ""), str(e)))
@@ -406,7 +413,7 @@ class MainWindow(QMainWindow):
         # Remove do banco de dados
         if deleted_paths:
             self.db.delete_files_by_paths(deleted_paths)
-            self.lbl_status_results.setText(f"🗑️ {len(deleted_paths)} arquivo(s) excluído(s) do disco com sucesso ({size_str} liberados).")
+            self.lbl_status_results.setText(f"🗑️ {len(deleted_paths)} arquivo(s) movido(s) para a Lixeira com sucesso ({size_str} liberados).")
             self._update_drives_list()
             self.perform_search()
 

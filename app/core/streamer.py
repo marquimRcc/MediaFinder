@@ -114,16 +114,20 @@ class RangeHTTPRequestHandler(BaseHTTPRequestHandler):
 
             if range_header and range_header.startswith("bytes="):
                 range_str = range_header[6:].strip()
-                if range_str.startswith("-"):
-                    suffix_len = int(range_str[1:])
-                    start = max(0, total_size - suffix_len)
-                    end = total_size - 1
-                else:
-                    parts = range_str.split("-")
-                    if parts[0]:
-                        start = int(parts[0])
-                    if len(parts) > 1 and parts[1]:
-                        end = int(parts[1])
+                try:
+                    if range_str.startswith("-"):
+                        suffix_len = int(range_str[1:])
+                        start = max(0, total_size - suffix_len)
+                        end = total_size - 1
+                    else:
+                        parts = range_str.split("-")
+                        if parts[0]:
+                            start = int(parts[0])
+                        if len(parts) > 1 and parts[1]:
+                            end = int(parts[1])
+                except (ValueError, IndexError):
+                    self.send_error(400, "Header Range inválido")
+                    return
 
                 if start >= total_size or end >= total_size or start > end:
                     self.send_response(416)
@@ -183,7 +187,9 @@ class MediaStreamServer:
         self.httpd: Optional[ThreadedHTTPServer] = None
         self.server_thread: Optional[threading.Thread] = None
         self.active_tokens: Dict[str, str] = {}
+        self._path_to_token: Dict[str, str] = {}
         self.actual_port: int = port
+        self._lock = threading.Lock()
 
     def start(self) -> int:
         if self.httpd is not None:
@@ -210,15 +216,38 @@ class MediaStreamServer:
             self.httpd.server_close()
             self.httpd = None
             self.server_thread = None
+        self.clear_tokens()
 
     def register_file(self, file_path: str) -> str:
+        """Gera um token criptograficamente seguro e aleatório (não previsível) para a mídia."""
         self.start()
-        token = str(uuid.uuid5(uuid.NAMESPACE_URL, file_path))
-        self.active_tokens[token] = os.path.abspath(file_path)
+        abs_p = os.path.abspath(file_path)
+        with self._lock:
+            token = self._path_to_token.get(abs_p)
+            if not token:
+                import secrets
+                token = secrets.token_urlsafe(24)
+                self.active_tokens[token] = abs_p
+                self._path_to_token[abs_p] = token
         return f"http://{self.host_ip}:{self.actual_port}/stream/{token}"
 
+    def unregister_file(self, file_path: str):
+        """Remove o acesso HTTP de um arquivo específico."""
+        abs_p = os.path.abspath(file_path)
+        with self._lock:
+            token = self._path_to_token.pop(abs_p, None)
+            if token:
+                self.active_tokens.pop(token, None)
+
+    def clear_tokens(self):
+        """Revoga todos os tokens ativos liberados na rede."""
+        with self._lock:
+            self.active_tokens.clear()
+            self._path_to_token.clear()
+
     def get_file_path(self, token: str) -> Optional[str]:
-        return self.active_tokens.get(token)
+        with self._lock:
+            return self.active_tokens.get(token)
 
 
 @dataclass
@@ -529,6 +558,7 @@ class TVCastManager(QObject):
             except Exception:
                 pass
         self.is_casting = False
+        self.stream_server.clear_tokens()
         self.cast_stopped.emit()
 
     def seek(self, position_seconds: float):

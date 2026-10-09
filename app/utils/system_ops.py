@@ -4,12 +4,35 @@ import sys
 import shutil
 from pathlib import Path
 
+DANGEROUS_EXECUTABLE_EXTENSIONS = {
+    # Windows
+    ".exe", ".bat", ".cmd", ".com", ".scr", ".pif", ".msi", ".msp", ".vbs",
+    ".vbe", ".js", ".jse", ".wsf", ".wsh", ".ps1", ".ps1xml", ".ps2", ".ps2xml",
+    ".psc1", ".psc2", ".msc", ".hta", ".cpl", ".reg",
+    # Linux / Unix
+    ".sh", ".bash", ".zsh", ".csh", ".ksh", ".bin", ".run", ".appimage",
+    ".desktop", ".service", ".apk", ".deb", ".rpm"
+}
+
+def is_dangerous_file(file_path: str) -> bool:
+    """Verifica se a extensão do arquivo representa risco de execução de código no SO."""
+    ext = os.path.splitext(file_path)[1].lower()
+    return ext in DANGEROUS_EXECUTABLE_EXTENSIONS
+
 def open_file(file_path: str) -> bool:
-    """Abre o arquivo no aplicativo padrão associado no sistema operacional (Linux/Windows/macOS)."""
+    """
+    Abre o arquivo no aplicativo padrão associado no sistema operacional (Linux/Windows/macOS).
+    Bloqueia a execução direta de binários e scripts potencialmente perigosos por segurança,
+    redirecionando para o gerenciador de arquivos (reveal_in_explorer).
+    """
     try:
         norm_path = os.path.normpath(file_path)
         if not os.path.exists(norm_path):
             return False
+
+        if is_dangerous_file(norm_path):
+            # Por segurança, nunca executa binários/scripts diretamente do buscador
+            return reveal_in_explorer(norm_path)
 
         if sys.platform == "win32":
             os.startfile(norm_path)
@@ -34,10 +57,11 @@ def reveal_in_explorer(file_path: str) -> bool:
             return False
 
         if sys.platform == "win32":
-            if os.path.exists(norm_path):
-                subprocess.Popen(f'explorer /select,"{norm_path}"')
+            clean_path = norm_path.replace('"', '')
+            if os.path.exists(clean_path):
+                subprocess.Popen(["explorer", f'/select,{clean_path}'])
             elif os.path.exists(parent_dir):
-                subprocess.Popen(["explorer", parent_dir])
+                subprocess.Popen(["explorer", parent_dir.replace('"', '')])
             return True
         elif sys.platform == "darwin":
             if os.path.exists(norm_path):

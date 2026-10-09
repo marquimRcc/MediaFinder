@@ -150,6 +150,11 @@ class AppConfig:
         try:
             with open(self.config_file, "w", encoding="utf-8") as f:
                 json.dump(self.data, f, indent=4, ensure_ascii=False)
+            if sys.platform != "win32":
+                try:
+                    os.chmod(self.config_file, 0o600)
+                except OSError:
+                    pass
         except Exception as e:
             print(f"Erro ao salvar config: {e}")
 

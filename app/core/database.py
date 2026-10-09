@@ -110,6 +110,12 @@ class MediaDatabase:
 
             conn.commit()
 
+        if sys.platform != "win32" and os.path.exists(self.db_path):
+            try:
+                os.chmod(self.db_path, 0o600)
+            except OSError:
+                pass
+
     def upsert_files_batch(self, files_data: List[Dict[str, Any]]) -> int:
         """Insere ou atualiza registros de arquivos em lote para máxima velocidade."""
         if not files_data:

@@ -266,7 +266,25 @@ def run_tests():
             assert cast_dialog is not None
             assert cast_dialog.list_devices is not None
 
-        print("✓ Todos os componentes, streaming HTTP 206, diálogos e IndexWorker validados com sucesso!")
+            # 4.10 Testes de Segurança (Validação de Executáveis e Revogação de Tokens)
+            from app.utils.system_ops import is_dangerous_file
+            assert is_dangerous_file("script.sh") is True
+            assert is_dangerous_file("app.exe") is True
+            assert is_dangerous_file("malicious.desktop") is True
+            assert is_dangerous_file("trojan.bat") is True
+            assert is_dangerous_file("filme.mp4") is False
+            assert is_dangerous_file("foto.png") is False
+
+            # Validação de revogação de tokens
+            stream_server.start()
+            s_token_url = stream_server.register_file(sample_file)
+            token_key = s_token_url.split("/")[-1]
+            assert stream_server.get_file_path(token_key) is not None
+            stream_server.clear_tokens()
+            assert stream_server.get_file_path(token_key) is None
+            stream_server.stop()
+
+        print("✓ Todos os componentes, streaming HTTP 206, diálogos, segurança e IndexWorker validados com sucesso!")
     finally:
         try:
             if os.path.exists(ui_db_path):

@@ -225,7 +225,7 @@ class ResultsTableView(QTableWidget):
 
             menu.addSeparator()
 
-            act_del = menu.addAction("🗑️ Excluir do Disco... (Delete)")
+            act_del = menu.addAction("🗑️ Mover para a Lixeira... (Delete)")
             act_del.triggered.connect(lambda: self.delete_requested.emit(selected_files))
         else:
             act_open_all = menu.addAction(f"🚀 Abrir Selecionados ({count} arquivos)")
@@ -244,7 +244,7 @@ class ResultsTableView(QTableWidget):
 
             menu.addSeparator()
 
-            act_del = menu.addAction(f"🗑️ Excluir {count} Arquivos do Disco... (Delete)")
+            act_del = menu.addAction(f"🗑️ Mover {count} Arquivos para a Lixeira... (Delete)")
             act_del.triggered.connect(lambda: self.delete_requested.emit(selected_files))
 
         menu.exec(self.viewport().mapToGlobal(pos))
