@@ -2,7 +2,7 @@ import os
 import sys
 import sqlite3
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Set
 
 class MediaDatabase:
     """Gerencia a base de dados SQLite e índices FTS para busca instantânea de arquivos."""
@@ -139,15 +139,34 @@ class MediaDatabase:
             conn.commit()
             return cursor.rowcount
 
-    def remove_missing_files(self, existing_paths_set: set, folder_root: str) -> int:
-        """Remove do banco arquivos da pasta que não existem mais no disco."""
+    def remove_missing_files(self, existing_paths_set: set, folder_root: str, skipped_dirs: Optional[Set[str]] = None) -> int:
+        """Remove do banco arquivos da pasta que não existem mais no disco, preservando subpastas inacessíveis."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            norm_root = os.path.normpath(folder_root)
-            # Seleciona todos os caminhos do banco que começam com a pasta
-            cursor.execute("SELECT id, path FROM files WHERE path LIKE ?", (f"{norm_root}%",))
+            clean_root = os.path.normpath(folder_root).rstrip("/\\")
+            prefix_fwd = clean_root + "/%"
+            prefix_back = clean_root + "\\%"
+            # Seleciona caminhos que correspondem à pasta ou estão dentro dela com separador (/ ou \)
+            cursor.execute(
+                "SELECT id, path FROM files WHERE path = ? OR path LIKE ? OR path LIKE ?",
+                (clean_root, prefix_fwd, prefix_back)
+            )
             rows = cursor.fetchall()
-            ids_to_delete = [r["id"] for r in rows if r["path"] not in existing_paths_set]
+
+            skipped_prefixes = []
+            for d in (skipped_dirs or set()):
+                cd = os.path.normpath(d).rstrip("/\\")
+                skipped_prefixes.extend([cd + "/", cd + "\\"])
+
+            ids_to_delete = []
+            for r in rows:
+                p = r["path"]
+                if p in existing_paths_set:
+                    continue
+                # Se o arquivo estava dentro de uma subpasta que não pôde ser lida por falta de permissão, preserva
+                if any(p.startswith(sp) for sp in skipped_prefixes):
+                    continue
+                ids_to_delete.append(r["id"])
 
             if ids_to_delete:
                 # Divide em lotes de 900 para não estourar o limite de parâmetros do sqlite
@@ -178,13 +197,21 @@ class MediaDatabase:
         """Remove do banco todos os arquivos que pertencem a uma pasta desmarcada/removida."""
         if not folder_path:
             return 0
-        norm_root = os.path.normpath(folder_path)
+        clean_root = os.path.normpath(folder_path).rstrip("/\\")
+        prefix_fwd = clean_root + "/%"
+        prefix_back = clean_root + "\\%"
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM files WHERE path LIKE ?", (f"{norm_root}%",))
+            cursor.execute(
+                "DELETE FROM files WHERE path = ? OR path LIKE ? OR path LIKE ?",
+                (clean_root, prefix_fwd, prefix_back)
+            )
             deleted_count = cursor.rowcount
             try:
-                cursor.execute("DELETE FROM files_fts WHERE path LIKE ?", (f"{norm_root}%",))
+                cursor.execute(
+                    "DELETE FROM files_fts WHERE path = ? OR path LIKE ? OR path LIKE ?",
+                    (clean_root, prefix_fwd, prefix_back)
+                )
             except Exception:
                 pass
             conn.commit()
@@ -220,21 +247,13 @@ class MediaDatabase:
                 params.append(drive_clean)
 
 
-            # 3. Filtro por Query (FTS5 ou LIKE para correspondência parcial flexível)
-            use_fts = False
+            # 3. Filtro por Query (Busca por correspondência de substrings em múltiplos termos)
             if query:
-                # Termos separados para permitir busca tipo 'curso aula 01'
                 terms = query.split()
-                fts_terms = []
                 like_clauses = []
                 for term in terms:
-                    clean_term = "".join(c for c in term if c.isalnum() or c in ("-", "_", "."))
-                    if clean_term:
-                        fts_terms.append(f'"{clean_term}"*')
                     like_clauses.append("(f.name LIKE ? OR f.path LIKE ?)")
                     params.extend([f"%{term}%", f"%{term}%"])
-                
-                # Se houver múltiplos termos, usamos LIKE com índices para máxima precisão de substring
                 where_clauses.append(" AND ".join(like_clauses))
 
             where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
@@ -294,9 +313,11 @@ class MediaDatabase:
             if folders:
                 folder_clauses = []
                 for folder in folders:
-                    norm_folder = os.path.normpath(folder)
-                    folder_clauses.append("f.path LIKE ?")
-                    params.append(f"{norm_folder}%")
+                    clean_folder = os.path.normpath(folder).rstrip("/\\")
+                    prefix_fwd = clean_folder + "/%"
+                    prefix_back = clean_folder + "\\%"
+                    folder_clauses.append("(f.path = ? OR f.path LIKE ? OR f.path LIKE ?)")
+                    params.extend([clean_folder, prefix_fwd, prefix_back])
                 if folder_clauses:
                     where_clauses.append(f"({' OR '.join(folder_clauses)})")
 
@@ -353,9 +374,11 @@ class MediaDatabase:
                 for folder in folders:
                     folder_str = str(folder).strip()
                     if folder_str:
-                        norm_folder = os.path.normpath(folder_str)
-                        folder_clauses.append("f.path LIKE ?")
-                        params.append(f"{norm_folder}%")
+                        clean_folder = os.path.normpath(folder_str).rstrip("/\\")
+                        prefix_fwd = clean_folder + "/%"
+                        prefix_back = clean_folder + "\\%"
+                        folder_clauses.append("(f.path = ? OR f.path LIKE ? OR f.path LIKE ?)")
+                        params.extend([clean_folder, prefix_fwd, prefix_back])
                 if folder_clauses:
                     where_clauses.append(f"({' OR '.join(folder_clauses)})")
 

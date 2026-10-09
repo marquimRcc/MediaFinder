@@ -378,3 +378,7 @@ class CastDialog(QDialog):
         self.btn_start_cast.setEnabled(True)
         self.btn_start_cast.setText("▶ Conectar e Transmitir para a TV")
         QMessageBox.critical(self, "Erro na Transmissão", message)
+
+    def closeEvent(self, event):
+        self.manager.stop_discovery()
+        super().closeEvent(event)

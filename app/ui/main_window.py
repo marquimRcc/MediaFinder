@@ -387,6 +387,7 @@ class MainWindow(QMainWindow):
 
         deleted_paths = []
         failed_files = []
+        trash_unsupported_files = []
 
         for f in files:
             path = f.get("path", "")
@@ -397,8 +398,36 @@ class MainWindow(QMainWindow):
                     try:
                         import send2trash
                         send2trash.send2trash(path)
-                    except Exception:
-                        # Fallback se o sistema de arquivos não suportar lixeira (ex: FAT/exFAT/NFS)
+                        deleted_paths.append(path)
+                    except Exception as s2t_err:
+                        trash_unsupported_files.append((f, str(s2t_err)))
+                else:
+                    deleted_paths.append(path)
+            except Exception as e:
+                failed_files.append((f.get("name", ""), str(e)))
+
+        # Se houver arquivos cujo sistema de arquivos não suporta Lixeira, solicita consentimento explícito
+        if trash_unsupported_files:
+            unsupported_names = "\n".join(f"• {f.get('name', '')}" for f, _ in trash_unsupported_files[:5])
+            if len(trash_unsupported_files) > 5:
+                unsupported_names += f"\n• ... e mais {len(trash_unsupported_files) - 5} arquivo(s)"
+
+            perm_reply = QMessageBox.warning(
+                self,
+                "⚠️ Lixeira Não Suportada",
+                f"A Lixeira do sistema não está disponível para {len(trash_unsupported_files)} arquivo(s) "
+                f"(comum em pendrives FAT/exFAT, compartilhamentos de rede ou montagens sem suporte a lixeira):\n\n"
+                f"{unsupported_names}\n\n"
+                f"Deseja EXCLUIR DEFINITIVAMENTE estes arquivos do disco?\n"
+                f"⚠️ ATENÇÃO: Esta ação é irreversível e os arquivos NÃO poderão ser recuperados!",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+
+            if perm_reply == QMessageBox.Yes:
+                for f, _ in trash_unsupported_files:
+                    path = f.get("path", "")
+                    try:
                         if os.path.islink(path):
                             os.unlink(path)
                         elif os.path.isdir(path):
@@ -406,14 +435,14 @@ class MainWindow(QMainWindow):
                             shutil.rmtree(path)
                         else:
                             os.remove(path)
-                deleted_paths.append(path)
-            except Exception as e:
-                failed_files.append((f.get("name", ""), str(e)))
+                        deleted_paths.append(path)
+                    except Exception as e:
+                        failed_files.append((f.get("name", ""), str(e)))
 
-        # Remove do banco de dados
+        # Remove do banco de dados os arquivos que foram efetivamente excluídos
         if deleted_paths:
             self.db.delete_files_by_paths(deleted_paths)
-            self.lbl_status_results.setText(f"🗑️ {len(deleted_paths)} arquivo(s) movido(s) para a Lixeira com sucesso ({size_str} liberados).")
+            self.lbl_status_results.setText(f"🗑️ {len(deleted_paths)} arquivo(s) processado(s) com sucesso ({size_str} liberados).")
             self._update_drives_list()
             self.perform_search()
 

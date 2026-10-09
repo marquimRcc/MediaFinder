@@ -89,6 +89,15 @@ class RangeHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self._process_request(send_body=True)
 
+    def do_OPTIONS(self):
+        """Responde a requisições pre-flight CORS enviadas por players de Smart TVs e navegadores."""
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Headers", "Range, Content-Type, Accept, Origin")
+        self.send_header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+        self.send_header("Access-Control-Max-Age", "86400")
+        self.end_headers()
+
     def _process_request(self, send_body: bool = True):
         media_server = getattr(self.server, "media_server", None)
         if not media_server:
@@ -129,11 +138,16 @@ class RangeHTTPRequestHandler(BaseHTTPRequestHandler):
                     self.send_error(400, "Header Range inválido")
                     return
 
-                if start >= total_size or end >= total_size or start > end:
+                # RFC 7233 / RFC 9110: Status 416 somente se 'start' ultrapassar o tamanho total
+                if start >= total_size:
                     self.send_response(416)
                     self.send_header("Content-Range", f"bytes */{total_size}")
                     self.end_headers()
                     return
+
+                # Clampa 'end' ao final do arquivo quando for maior que o tamanho
+                if end >= total_size or end < start:
+                    end = total_size - 1
 
                 length = end - start + 1
                 self.send_response(206)
@@ -382,6 +396,15 @@ class TVCastManager(QObject):
 
         self.discovery_finished.emit(len(self.discovered_devices))
 
+    def stop_discovery(self):
+        """Encerra a busca mDNS/CastBrowser e libera sockets de rede em segundo plano."""
+        if self._browser:
+            try:
+                self._browser.stop_discovery()
+            except Exception:
+                pass
+            self._browser = None
+
     def _get_arp_candidates(self) -> List[str]:
         candidates = []
         try:
@@ -469,17 +492,25 @@ class TVCastManager(QObject):
                     except Exception as app_err:
                         logger.debug(f"Aviso ao iniciar APP_MEDIA_RECEIVER: {app_err}")
 
-                # Detecta legendas correspondentes (.srt ou .vtt)
+                # Detecta legendas correspondentes (.vtt ou .srt)
                 base_no_ext, _ = os.path.splitext(file_path)
                 sub_url = None
-                srt_candidate = base_no_ext + ".srt"
                 vtt_candidate = base_no_ext + ".vtt"
+                srt_candidate = base_no_ext + ".srt"
 
-                if os.path.exists(srt_candidate):
-                    if convert_srt_to_vtt(srt_candidate, vtt_candidate):
-                        sub_url = self.stream_server.register_file(vtt_candidate)
-                elif os.path.exists(vtt_candidate):
+                if os.path.exists(vtt_candidate):
+                    # Prioriza VTT já existente do usuário sem alterá-lo
                     sub_url = self.stream_server.register_file(vtt_candidate)
+                elif os.path.exists(srt_candidate):
+                    # Converte SRT para VTT em cache temporário isolado (nunca grava na pasta de mídia)
+                    import tempfile
+                    import hashlib
+                    cache_dir = os.path.join(tempfile.gettempdir(), "MediaFinder_cache", "subtitles")
+                    os.makedirs(cache_dir, exist_ok=True)
+                    srt_hash = hashlib.sha256(srt_candidate.encode("utf-8")).hexdigest()[:16]
+                    cached_vtt = os.path.join(cache_dir, f"{srt_hash}.vtt")
+                    if convert_srt_to_vtt(srt_candidate, cached_vtt):
+                        sub_url = self.stream_server.register_file(cached_vtt)
 
                 mc = cast_device.media_controller
                 mc.play_media(
@@ -522,6 +553,13 @@ class TVCastManager(QObject):
                             curr = float(status.current_time or 0.0)
                             dur = float(status.duration or 0.0)
                             self.status_updated.emit(state, curr, dur)
+
+                            # Encerramento natural do vídeo quando termina
+                            if state == "IDLE" and curr > 0 and (dur > 0 and curr >= dur - 3.0):
+                                self.is_casting = False
+                                self.stream_server.clear_tokens()
+                                self.cast_stopped.emit()
+                                break
 
                         cast_status = self.active_chromecast.status
                         if cast_status:

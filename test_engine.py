@@ -8,6 +8,12 @@ from pathlib import Path
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
+# Isola o ambiente de testes em diretório temporário para NUNCA tocar nas configurações reais do usuário
+_test_tmp_dir = tempfile.TemporaryDirectory()
+os.environ["XDG_CONFIG_HOME"] = os.path.join(_test_tmp_dir.name, "config")
+os.environ["XDG_DATA_HOME"] = os.path.join(_test_tmp_dir.name, "share")
+os.environ["APPDATA"] = os.path.join(_test_tmp_dir.name, "appdata")
+
 from app.core.config import AppConfig
 from app.core.database import MediaDatabase
 from app.core.scanner import IndexWorker
@@ -15,7 +21,7 @@ from app.core.tv_schedule import TVScheduleManager
 from app.utils.media_helpers import get_category_for_extension, format_file_size, get_drive_letter
 
 def run_tests():
-    print("Iniciando testes unitários e de integração...")
+    print("Iniciando testes unitários e de integração (ambiente isolado)...")
 
     # 1. Teste de helpers
     assert get_category_for_extension(".mp4") == "video"
@@ -256,6 +262,19 @@ def run_tests():
                 assert resp.status == 206
                 assert resp.headers.get("Content-Range") == "bytes 0-99/1024"
                 assert len(resp.read()) == 100
+
+            # Teste Range Request maior que o arquivo (RFC 7233 - deve clampar ao final sem dar erro 416)
+            range_clamped = urllib.request.Request(url, headers={"Range": "bytes=0-99999"})
+            with urllib.request.urlopen(range_clamped) as resp:
+                assert resp.status == 206
+                assert resp.headers.get("Content-Range") == "bytes 0-1023/1024"
+                assert len(resp.read()) == 1024
+
+            # Teste OPTIONS Request (pre-flight CORS)
+            options_req = urllib.request.Request(url, method="OPTIONS")
+            with urllib.request.urlopen(options_req) as resp:
+                assert resp.status == 204
+                assert "OPTIONS" in resp.headers.get("Access-Control-Allow-Methods", "")
 
             stream_server.stop()
 

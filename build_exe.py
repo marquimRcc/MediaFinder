@@ -30,7 +30,23 @@ def build():
         "--noconfirm",
         f"--icon={icon_file}",
         f"--add-data=assets{sep}assets",
-        "--collect-all=PySide6",
+        # Inclui apenas os submódulos PySide6 utilizados pelo MediaFinder
+        "--collect-submodules=PySide6.QtCore",
+        "--collect-submodules=PySide6.QtGui",
+        "--collect-submodules=PySide6.QtWidgets",
+        "--collect-submodules=PySide6.QtMultimedia",
+        "--collect-submodules=PySide6.QtMultimediaWidgets",
+        # Exclui bibliotecas pesadas e desnecessárias para reduzir drasticamente o tamanho do binário
+        "--exclude-module=PySide6.QtWebEngineCore",
+        "--exclude-module=PySide6.QtWebEngineWidgets",
+        "--exclude-module=PySide6.Qt3DCore",
+        "--exclude-module=PySide6.Qt3DRender",
+        "--exclude-module=PySide6.QtQuick",
+        "--exclude-module=PySide6.QtQml",
+        "--exclude-module=PySide6.QtDesigner",
+        "--exclude-module=PySide6.QtSql",
+        "--exclude-module=PySide6.QtTest",
+        "--exclude-module=PySide6.QtPdf",
         "--collect-all=PIL",
         "main.py"
     ]

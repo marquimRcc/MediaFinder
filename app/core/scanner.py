@@ -84,6 +84,7 @@ class IndexWorker(QThread):
 
         batch_records: List[Dict[str, Any]] = []
         existing_paths: Set[str] = set()
+        skipped_dirs: Set[str] = set()
         count = 0
         
         # Pilha de diretórios para varredura iterativa (evita estouro de recursão)
@@ -136,7 +137,9 @@ class IndexWorker(QThread):
                         except (PermissionError, FileNotFoundError, OSError):
                             continue
 
-            except (PermissionError, FileNotFoundError, OSError):
+            except (PermissionError, OSError):
+                # Registra pastas sem permissão para não apagar indevidamente seus arquivos do índice
+                skipped_dirs.add(current_dir)
                 continue
 
         # Inserir o restante
@@ -144,8 +147,8 @@ class IndexWorker(QThread):
             self.db.upsert_files_batch(batch_records)
             batch_records.clear()
 
-        # Limpar registros do banco que foram excluídos do disco
-        if self._is_running and existing_paths:
-            self.db.remove_missing_files(existing_paths, root_folder)
+        # Limpar registros do banco que foram excluídos do disco (mesmo se a pasta agora estiver vazia)
+        if self._is_running:
+            self.db.remove_missing_files(existing_paths, root_folder, skipped_dirs=skipped_dirs)
 
         return count
