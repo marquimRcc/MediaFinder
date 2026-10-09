@@ -246,11 +246,36 @@ class TVCastManager(QObject):
 
             arp_candidates = self._get_arp_candidates()
 
+            # 1. Sondagem ultra-rápida HTTP/Eureka nos IPs conhecidos (exibe na UI em ~50ms)
+            for ip in arp_candidates:
+                try:
+                    import urllib.request
+                    import json
+                    req = urllib.request.urlopen(f"http://{ip}:8008/setup/eureka_info?params=name,device_info", timeout=0.8)
+                    data = json.loads(req.read().decode())
+                    name = data.get("name") or f"TV ({ip})"
+                    model_str = "LG webOS TV (Google Cast)" if "lg" in name.lower() or "webos" in name.lower() else "Chromecast (Google Cast)"
+                    dev_id = ip
+                    device = TVDevice(
+                        name=name,
+                        host=ip,
+                        model=model_str,
+                        device_type="cast",
+                        device_id=dev_id,
+                        raw_device=None
+                    )
+                    if dev_id not in self.discovered_devices:
+                        self.discovered_devices[dev_id] = device
+                        found_count += 1
+                        self.device_found.emit(device)
+                except Exception:
+                    pass
+
             def on_device_found(chromecast):
                 nonlocal found_count
                 cast_info = chromecast.cast_info
                 name = chromecast.name or cast_info.friendly_name or "TV Cast"
-                dev_id = str(cast_info.uuid or cast_info.host)
+                dev_id = str(cast_info.host)
                 model = cast_info.model_name or "Google Cast / Smart TV"
 
                 if "webos" in model.lower() or "lg" in name.lower():
@@ -271,6 +296,9 @@ class TVCastManager(QObject):
                     self.discovered_devices[dev_id] = device
                     found_count += 1
                     self.device_found.emit(device)
+                else:
+                    # Atualiza com a instância viva do pychromecast
+                    self.discovered_devices[dev_id].raw_device = chromecast
 
             try:
                 chromecasts, browser = pychromecast.get_chromecasts(

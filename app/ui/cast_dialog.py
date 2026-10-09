@@ -55,6 +55,7 @@ class CastDialog(QDialog):
             QDialog {
                 background-color: #0F1217;
                 color: #FFFFFF;
+                font-family: 'Noto Sans', 'Noto Color Emoji', sans-serif;
             }
             QLabel {
                 color: #E2E8F0;
@@ -174,7 +175,7 @@ class CastDialog(QDialog):
         layout.addWidget(self.list_devices, 1)
 
         # Botão Conectar
-        self.btn_start_cast = QPushButton("▶️ Conectar & Transmitir para a TV")
+        self.btn_start_cast = QPushButton("▶ Conectar e Transmitir para a TV")
         self.btn_start_cast.setObjectName("primary_btn")
         self.btn_start_cast.setStyleSheet("padding: 9px; font-size: 13px;")
         self.btn_start_cast.clicked.connect(self._on_start_cast)
@@ -319,7 +320,7 @@ class CastDialog(QDialog):
 
     def _on_cast_started(self, device_name: str, file_name: str):
         self.btn_start_cast.setEnabled(True)
-        self.btn_start_cast.setText("▶️ Conectar & Transmitir para a TV")
+        self.btn_start_cast.setText("▶ Conectar e Transmitir para a TV")
         self.remote_panel.setVisible(True)
         self.lbl_remote_title.setText(f"🟢 Transmitindo para: {device_name}")
         self.btn_play_pause.setText("⏸️ Pausar")
@@ -375,5 +376,5 @@ class CastDialog(QDialog):
 
     def _on_error(self, message: str):
         self.btn_start_cast.setEnabled(True)
-        self.btn_start_cast.setText("▶️ Conectar & Transmitir para a TV")
+        self.btn_start_cast.setText("▶ Conectar e Transmitir para a TV")
         QMessageBox.critical(self, "Erro na Transmissão", message)
