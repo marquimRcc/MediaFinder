@@ -240,6 +240,83 @@ class RangeHTTPRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
+        # GET /api/media/<file_id>/poster ou /api/media/poster?id=<file_id>
+        import re
+        m_poster = re.match(r"^/api/media/(\d+)/poster$", path)
+        poster_id = None
+        if m_poster:
+            poster_id = int(m_poster.group(1))
+        elif path == "/api/media/poster":
+            poster_id = int(query_params.get("id", [0])[0])
+
+        if poster_id:
+            from app.core.metadata import get_posters_dir
+            posters_dir = get_posters_dir()
+            local_poster = posters_dir / f"{poster_id}.jpg"
+            if local_poster.exists() and local_poster.stat().st_size > 100:
+                self.send_response(200)
+                self.send_header("Content-Type", "image/jpeg")
+                self.send_header("Cache-Control", "public, max-age=604800")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Content-Length", str(local_poster.stat().st_size))
+                self.end_headers()
+                if send_body:
+                    with open(local_poster, "rb") as f:
+                        self.wfile.write(f.read())
+                return
+            else:
+                meta = db.get_media_metadata(poster_id)
+                if meta and meta.get("poster_url"):
+                    self.send_response(302)
+                    self.send_header("Location", meta["poster_url"])
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+                    return
+                self._send_json_response({"error": "Pôster não encontrado"}, 404, send_body)
+                return
+
+        # GET /api/media/details?id=<file_id>
+        if path == "/api/media/details":
+            file_id = int(query_params.get("id", [0])[0])
+            if file_id <= 0:
+                self._send_json_response({"error": "ID de arquivo inválido"}, 400, send_body)
+                return
+
+            from app.core.metadata import MediaMetadataService, clean_movie_title
+            service = MediaMetadataService.get_instance(db)
+            meta = db.get_media_metadata(file_id)
+            if not meta:
+                with db._get_connection() as conn:
+                    row = conn.execute("SELECT name FROM files WHERE id = ?;", (file_id,)).fetchone()
+                if row:
+                    meta = service.get_or_fetch(file_id, row["name"])
+
+            if not meta:
+                with db._get_connection() as conn:
+                    row = conn.execute("SELECT id, name, size, category FROM files WHERE id = ?;", (file_id,)).fetchone()
+                if row:
+                    c_title, yr = clean_movie_title(row["name"])
+                    meta = {
+                        "file_id": file_id,
+                        "title": c_title,
+                        "original_title": c_title,
+                        "year": yr,
+                        "rating": None,
+                        "votes": None,
+                        "runtime": None,
+                        "genre": "Vídeo",
+                        "rated": "Livre",
+                        "plot": "Nenhuma sinopse disponível para este arquivo.",
+                        "director": None,
+                        "actors": None,
+                        "poster_url": None,
+                        "poster_local": None,
+                        "backdrop_url": None
+                    }
+
+            self._send_json_response(meta or {}, 200, send_body)
+            return
+
         # GET /api/cast/devices
         if path == "/api/cast/devices":
             cast_mgr = TVCastManager.get_instance()
@@ -511,6 +588,15 @@ class MediaStreamServer:
         self.server_thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
         self.server_thread.start()
         logger.info(f"Servidor de streaming iniciado em http://{self.host_ip}:{self.actual_port}/")
+
+        if self.db:
+            try:
+                from app.core.metadata import MediaMetadataService
+                meta_svc = MediaMetadataService.get_instance(self.db)
+                meta_svc.start_background_enricher()
+            except Exception as e:
+                logger.debug(f"Aviso ao iniciar serviço de metadados: {e}")
+
         return self.actual_port
 
     def stop(self):

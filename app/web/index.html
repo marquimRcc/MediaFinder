@@ -197,10 +197,16 @@
 
       <div class="remote-media-box">
         <div class="remote-poster-header">
-          <div class="remote-poster-thumbnail" id="remote-poster-thumbnail">🎬</div>
+          <div class="remote-poster-thumbnail" id="remote-poster-thumbnail">
+            <img id="remote-poster-img" src="" alt="Pôster" style="width: 100%; height: 100%; object-fit: cover; border-radius: inherit; display: none;">
+            <span id="remote-poster-icon">🎬</span>
+          </div>
           <div class="remote-media-meta">
             <div class="remote-media-title" id="remote-media-title">Meu Mestre Minha Vida 1989</div>
-            <div class="remote-media-tag" id="remote-media-tag">Transmitindo na TV</div>
+            <div class="remote-meta-subline">
+              <span class="badge-imdb-sm" id="remote-imdb-badge" style="display: none;">★ 7.4</span>
+              <span class="remote-media-tag" id="remote-media-tag">Transmitindo na TV</span>
+            </div>
           </div>
         </div>
         <input type="range" class="remote-scrubber" id="remote-scrubber" min="0" max="100" value="0">
@@ -285,6 +291,66 @@
         <button class="key-btn" id="btn-pin-cancel" style="font-size: 1rem; color: var(--text-muted);">Cancelar</button>
         <button class="key-btn" data-key="0">0</button>
         <button class="key-btn" id="btn-pin-backspace" style="font-size: 1.2rem;">⌫</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       MODAL: DETALHES DO FILME (METADADOS IMDB, SINOPSE, ELENCO E AÇÕES)
+       ========================================================================= -->
+  <div class="modal-overlay" id="modal-details">
+    <div class="details-sheet">
+      <div class="details-backdrop-wrap">
+        <div class="details-backdrop" id="details-backdrop"></div>
+        <div class="details-backdrop-gradient"></div>
+        <button class="details-close-btn" id="btn-close-details">✕</button>
+      </div>
+
+      <div class="details-content">
+        <div class="details-poster-row">
+          <div class="details-poster-box">
+            <img id="details-poster-img" class="details-poster-img" src="" alt="Pôster" style="display: none;">
+            <div class="details-poster-fallback" id="details-poster-fallback">🎬</div>
+          </div>
+          <div class="details-main-info">
+            <div class="details-title" id="details-title">Título do Filme</div>
+            <div class="details-original-title" id="details-original-title">Original Title</div>
+            <div class="details-badges-row">
+              <span class="badge-imdb" id="details-imdb-badge">★ 7.4</span>
+              <span class="badge-rated" id="details-rated-badge">14+</span>
+              <span class="badge-year" id="details-year">1989</span>
+              <span class="badge-runtime" id="details-runtime">1h 48m</span>
+            </div>
+            <div class="details-genre" id="details-genre">Drama • Biografia</div>
+          </div>
+        </div>
+
+        <!-- Botões de Ação Direta -->
+        <div class="details-actions">
+          <button class="btn-details-play" id="btn-details-play">
+            <span>▶</span>
+            <span>Assistir no Celular</span>
+          </button>
+          <button class="btn-details-cast" id="btn-details-cast">
+            <span>📺</span>
+            <span>Transmitir na TV</span>
+          </button>
+        </div>
+
+        <!-- Sinopse -->
+        <div class="details-section">
+          <h4 class="details-section-title">Sinopse</h4>
+          <p class="details-plot" id="details-plot">Carregando informações do IMDb...</p>
+        </div>
+
+        <!-- Elenco e Direção -->
+        <div class="details-section" id="details-cast-section">
+          <h4 class="details-section-title">Elenco Principal</h4>
+          <div class="details-cast-list" id="details-cast-list">
+            <!-- Atores inseridos dinamicamente -->
+          </div>
+          <div class="details-director" id="details-director"></div>
+        </div>
       </div>
     </div>
   </div>

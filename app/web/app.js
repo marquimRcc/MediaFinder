@@ -312,19 +312,53 @@ const App = {
   createMediaCard(item, isKids = false) {
     const card = document.createElement('div');
     card.className = 'media-card';
-    card.onclick = () => this.showMediaActions(item);
+    card.onclick = () => this.openMediaDetails(item.id);
 
     const poster = document.createElement('div');
     poster.className = 'media-poster';
-    poster.textContent = isKids ? '🦁' : (item.category === 'audio' ? '🎵' : '🎬');
+
+    const posterSrc = item.poster_local || item.poster_url;
+    const fallbackIcon = document.createElement('div');
+    fallbackIcon.className = 'media-poster-fallback';
+    fallbackIcon.textContent = isKids ? '🦁' : (item.category === 'audio' ? '🎵' : '🎬');
+
+    if (posterSrc) {
+      const img = document.createElement('img');
+      img.src = posterSrc;
+      img.alt = item.meta_title || item.name;
+      img.loading = 'lazy';
+      img.onerror = () => {
+        img.style.display = 'none';
+        fallbackIcon.style.display = 'block';
+      };
+      poster.appendChild(img);
+      fallbackIcon.style.display = 'none';
+    }
+    poster.appendChild(fallbackIcon);
+
+    if (item.imdb_rating) {
+      const badge = document.createElement('span');
+      badge.className = 'badge-imdb-card';
+      badge.textContent = `★ ${item.imdb_rating}`;
+      poster.appendChild(badge);
+    }
+
+    if (item.meta_rated && item.meta_rated !== 'Livre') {
+      const badgeRated = document.createElement('span');
+      badgeRated.className = 'badge-rated-card';
+      badgeRated.textContent = item.meta_rated;
+      poster.appendChild(badgeRated);
+    }
 
     const title = document.createElement('div');
     title.className = 'media-card-title';
-    title.textContent = this.cleanTitle(item.name);
+    title.textContent = item.meta_title || this.cleanTitle(item.name);
 
     const meta = document.createElement('div');
     meta.className = 'media-card-meta';
-    meta.textContent = item.extension.toUpperCase().replace('.', '');
+    const yearStr = item.meta_year ? `${item.meta_year}` : '';
+    const genreStr = item.meta_genre ? item.meta_genre.split(',')[0].trim() : (item.extension.toUpperCase().replace('.', ''));
+    meta.textContent = yearStr ? `${yearStr} • ${genreStr}` : genreStr;
 
     card.appendChild(poster);
     card.appendChild(title);
@@ -336,14 +370,98 @@ const App = {
     return filename.replace(/\.[^/.]+$/, '').replace(/[._]/g, ' ');
   },
 
-  showMediaActions(item) {
-    // Opções de ação rápida: Assistir no celular ou na TV
-    const choice = confirm(`"${this.cleanTitle(item.name)}"\n\nDeseja Transmitir para a Smart TV?\n(Clique em Cancelar para assistir direto no Celular)`);
-    if (choice) {
-      this.openCastDevicesModal(item.id);
-    } else {
-      this.playLocal(item.id);
+  async openMediaDetails(fileId) {
+    try {
+      const modal = document.getElementById('modal-details');
+      modal.classList.add('active');
+
+      document.getElementById('details-title').textContent = 'Carregando...';
+      document.getElementById('details-original-title').textContent = '';
+      document.getElementById('details-plot').textContent = 'Consultando informações no IMDb...';
+      document.getElementById('details-poster-img').style.display = 'none';
+      document.getElementById('details-poster-fallback').style.display = 'block';
+      document.getElementById('details-imdb-badge').style.display = 'none';
+      document.getElementById('details-rated-badge').style.display = 'none';
+      document.getElementById('details-cast-list').innerHTML = '';
+
+      const res = await fetch(`/api/media/details?id=${fileId}`);
+      const data = await res.json();
+
+      document.getElementById('details-title').textContent = data.title || 'Filme';
+      document.getElementById('details-original-title').textContent = data.original_title && data.original_title !== data.title ? data.original_title : '';
+
+      if (data.rating) {
+        const imdbEl = document.getElementById('details-imdb-badge');
+        imdbEl.textContent = `★ ${data.rating}${data.votes ? ' (' + data.votes + ')' : ''}`;
+        imdbEl.style.display = 'inline-flex';
+      }
+
+      if (data.rated) {
+        const ratedEl = document.getElementById('details-rated-badge');
+        ratedEl.textContent = data.rated;
+        ratedEl.style.display = 'inline-block';
+      }
+
+      document.getElementById('details-year').textContent = data.year || '';
+      document.getElementById('details-runtime').textContent = data.runtime || '';
+      document.getElementById('details-genre').textContent = data.genre || '';
+      document.getElementById('details-plot').textContent = data.plot || 'Nenhuma sinopse disponível para este arquivo de vídeo.';
+
+      const posterSrc = data.poster_local || data.poster_url;
+      const posterImg = document.getElementById('details-poster-img');
+      const posterFallback = document.getElementById('details-poster-fallback');
+      if (posterSrc) {
+        posterImg.src = posterSrc;
+        posterImg.style.display = 'block';
+        posterFallback.style.display = 'none';
+      } else {
+        posterImg.style.display = 'none';
+        posterFallback.style.display = 'block';
+      }
+
+      const backdrop = document.getElementById('details-backdrop');
+      if (data.backdrop_url || posterSrc) {
+        backdrop.style.backgroundImage = `url('${data.backdrop_url || posterSrc}')`;
+      } else {
+        backdrop.style.backgroundImage = 'none';
+      }
+
+      document.getElementById('details-director').textContent = data.director ? `Direção: ${data.director}` : '';
+
+      const castList = document.getElementById('details-cast-list');
+      castList.innerHTML = '';
+      if (data.actors) {
+        const actors = data.actors.split(',').map(a => a.trim());
+        actors.forEach(actor => {
+          const chip = document.createElement('div');
+          chip.className = 'cast-chip';
+          chip.innerHTML = `
+            <div class="cast-avatar">🎭</div>
+            <div class="cast-name">${actor}</div>
+          `;
+          castList.appendChild(chip);
+        });
+        document.getElementById('details-cast-section').style.display = 'block';
+      } else {
+        document.getElementById('details-cast-section').style.display = 'none';
+      }
+
+      document.getElementById('btn-details-play').onclick = () => {
+        this.closeMediaDetails();
+        this.playLocal(data.file_id || fileId);
+      };
+      document.getElementById('btn-details-cast').onclick = () => {
+        this.closeMediaDetails();
+        this.openCastDevicesModal(data.file_id || fileId);
+      };
+
+    } catch (e) {
+      console.error('Erro ao abrir detalhes do filme:', e);
     }
+  },
+
+  closeMediaDetails() {
+    document.getElementById('modal-details').classList.remove('active');
   },
 
   // =========================================================================
@@ -526,6 +644,31 @@ const App = {
           });
           subSel.dataset.loaded = status.file_name;
         }
+
+        // Atualiza pôster e nota IMDb no controle remoto
+        const rImg = document.getElementById('remote-poster-img');
+        const rIcon = document.getElementById('remote-poster-icon');
+        const rBadge = document.getElementById('remote-imdb-badge');
+        if (rImg && status.file_name && rImg.dataset.file !== status.file_name) {
+          rImg.dataset.file = status.file_name;
+          fetch(`/api/catalog?query=${encodeURIComponent(this.cleanTitle(status.file_name))}&limit=1`)
+            .then(r => r.json())
+            .then(d => {
+              if (d.items && d.items.length > 0) {
+                const it = d.items[0];
+                const p = it.poster_local || it.poster_url;
+                if (p) {
+                  rImg.src = p;
+                  rImg.style.display = 'block';
+                  if (rIcon) rIcon.style.display = 'none';
+                }
+                if (it.imdb_rating && rBadge) {
+                  rBadge.textContent = `★ ${it.imdb_rating}`;
+                  rBadge.style.display = 'inline-block';
+                }
+              }
+            }).catch(() => {});
+        }
       } else {
         document.getElementById('btn-cast-toggle').classList.remove('cast-active');
       }
@@ -601,6 +744,8 @@ const App = {
     document.getElementById('btn-refresh-devices').onclick = () => this.fetchDevices();
     document.getElementById('btn-close-remote').onclick = () => this.closeRemoteModal();
     document.getElementById('btn-player-close').onclick = () => this.closeLocalPlayer();
+    const closeDetBtn = document.getElementById('btn-close-details');
+    if (closeDetBtn) closeDetBtn.onclick = () => this.closeMediaDetails();
 
     // Controles Remotos
     document.getElementById('btn-remote-play-pause').onclick = () => {

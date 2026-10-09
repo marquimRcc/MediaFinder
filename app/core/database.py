@@ -134,6 +134,32 @@ class MediaDatabase:
             """)
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_progress_updated ON playback_progress(updated_at DESC);")
 
+            # Tabela de metadados enriquecidos (IMDb / OMDb / TMDb)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS media_metadata (
+                    file_id INTEGER PRIMARY KEY,
+                    imdb_id TEXT,
+                    title TEXT,
+                    original_title TEXT,
+                    year INTEGER,
+                    rating REAL,
+                    votes TEXT,
+                    runtime TEXT,
+                    genre TEXT,
+                    rated TEXT,
+                    plot TEXT,
+                    director TEXT,
+                    actors TEXT,
+                    poster_url TEXT,
+                    poster_local TEXT,
+                    backdrop_url TEXT,
+                    updated_at REAL NOT NULL DEFAULT 0.0,
+                    FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
+                );
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_metadata_imdb ON media_metadata(imdb_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_metadata_rating ON media_metadata(rating DESC);")
+
             # Seed inicial de perfis se a tabela estiver vazia
             cursor.execute("SELECT COUNT(*) FROM user_profiles;")
             if cursor.fetchone()[0] == 0:
@@ -567,9 +593,15 @@ class MediaDatabase:
                 SELECT 
                     f.id, f.name, f.path, f.category, f.size, f.extension,
                     p.position_seconds, p.duration_seconds, p.updated_at,
-                    ROUND((p.position_seconds / MAX(p.duration_seconds, 1.0)) * 100, 1) as progress_percent
+                    ROUND((p.position_seconds / MAX(p.duration_seconds, 1.0)) * 100, 1) as progress_percent,
+                    m.imdb_id, m.title as meta_title, m.original_title, m.year as meta_year,
+                    m.rating as imdb_rating, m.votes as imdb_votes, m.runtime as meta_runtime,
+                    m.genre as meta_genre, m.rated as meta_rated, m.plot as meta_plot,
+                    m.director as meta_director, m.actors as meta_actors,
+                    m.poster_url, m.poster_local, m.backdrop_url
                 FROM playback_progress p
                 JOIN files f ON f.id = p.file_id
+                LEFT JOIN media_metadata m ON m.file_id = f.id
                 WHERE p.profile_id = ?
                   AND p.position_seconds >= 10.0
                   AND (p.duration_seconds <= 0 OR p.position_seconds < (p.duration_seconds * 0.95))
@@ -586,13 +618,13 @@ class MediaDatabase:
         limit: int = 50,
         offset: int = 0
     ) -> Tuple[List[Dict[str, Any]], int]:
-        """Busca catálogo paginado para web/mobile com isolamento para Perfil Kids."""
+        """Busca catálogo paginado para web/mobile enriquecido com dados do IMDb."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             where_clauses = []
             params: List[Any] = []
 
-            # Perfil Kids: filtra exclusivamente por padrões infantis
+            # Perfil Kids: filtra por padrões infantis ou classificação indicativa Livre/10+
             if is_kids:
                 kids_keywords = [
                     "%desenho%", "%kids%", "%infantil%", "%animacao%", "%animation%",
@@ -602,7 +634,7 @@ class MediaDatabase:
                 kids_params = []
                 for kw in kids_keywords:
                     kids_params.extend([kw, kw])
-                where_clauses.append(f"({kids_conditions})")
+                where_clauses.append(f"({kids_conditions} OR m.rated IN ('Livre', 'L', 'G', 'TV-Y', 'TV-G', '10+'))")
                 params.extend(kids_params)
 
             if category and category.lower() != "all":
@@ -612,18 +644,25 @@ class MediaDatabase:
             if query and query.strip():
                 terms = query.strip().split()
                 for term in terms:
-                    where_clauses.append("(f.name LIKE ? OR f.path LIKE ?)")
-                    params.extend([f"%{term}%", f"%{term}%"])
+                    where_clauses.append("(f.name LIKE ? OR f.path LIKE ? OR m.title LIKE ? OR m.original_title LIKE ?)")
+                    params.extend([f"%{term}%", f"%{term}%", f"%{term}%", f"%{term}%"])
 
             where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
 
-            count_query = f"SELECT COUNT(*) as total FROM files f {where_sql};"
+            count_query = f"SELECT COUNT(*) as total FROM files f LEFT JOIN media_metadata m ON m.file_id = f.id {where_sql};"
             cursor.execute(count_query, params)
             total = cursor.fetchone()["total"]
 
             data_query = f"""
-                SELECT f.id, f.name, f.path, f.parent_dir, f.extension, f.category, f.size, f.mtime, f.drive
+                SELECT 
+                    f.id, f.name, f.path, f.parent_dir, f.extension, f.category, f.size, f.mtime, f.drive,
+                    m.imdb_id, m.title as meta_title, m.original_title, m.year as meta_year,
+                    m.rating as imdb_rating, m.votes as imdb_votes, m.runtime as meta_runtime,
+                    m.genre as meta_genre, m.rated as meta_rated, m.plot as meta_plot,
+                    m.director as meta_director, m.actors as meta_actors,
+                    m.poster_url, m.poster_local, m.backdrop_url
                 FROM files f
+                LEFT JOIN media_metadata m ON m.file_id = f.id
                 {where_sql}
                 ORDER BY f.mtime DESC, f.name ASC
                 LIMIT ? OFFSET ?;
@@ -631,4 +670,76 @@ class MediaDatabase:
             cursor.execute(data_query, params + [limit, offset])
             rows = [dict(r) for r in cursor.fetchall()]
             return rows, total
+
+    def get_media_metadata(self, file_id: int) -> Optional[Dict[str, Any]]:
+        """Retorna os metadados do IMDb para um arquivo específico."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM media_metadata WHERE file_id = ?;", (file_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def save_media_metadata(self, file_id: int, data: Dict[str, Any]) -> None:
+        """Salva ou atualiza os metadados do IMDb no banco SQLite."""
+        import time
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO media_metadata (
+                    file_id, imdb_id, title, original_title, year, rating,
+                    votes, runtime, genre, rated, plot, director, actors,
+                    poster_url, poster_local, backdrop_url, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(file_id) DO UPDATE SET
+                    imdb_id = excluded.imdb_id,
+                    title = excluded.title,
+                    original_title = excluded.original_title,
+                    year = excluded.year,
+                    rating = excluded.rating,
+                    votes = excluded.votes,
+                    runtime = excluded.runtime,
+                    genre = excluded.genre,
+                    rated = excluded.rated,
+                    plot = excluded.plot,
+                    director = excluded.director,
+                    actors = excluded.actors,
+                    poster_url = excluded.poster_url,
+                    poster_local = COALESCE(excluded.poster_local, media_metadata.poster_local),
+                    backdrop_url = excluded.backdrop_url,
+                    updated_at = excluded.updated_at;
+            """, (
+                file_id,
+                data.get("imdb_id"),
+                data.get("title"),
+                data.get("original_title"),
+                data.get("year"),
+                data.get("rating"),
+                data.get("votes"),
+                data.get("runtime"),
+                data.get("genre"),
+                data.get("rated"),
+                data.get("plot"),
+                data.get("director"),
+                data.get("actors"),
+                data.get("poster_url"),
+                data.get("poster_local"),
+                data.get("backdrop_url"),
+                time.time()
+            ))
+            conn.commit()
+
+    def get_video_files_missing_metadata(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Retorna arquivos de vídeo que ainda não possuem metadados catalogados."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT f.id, f.name, f.path
+                FROM files f
+                LEFT JOIN media_metadata m ON m.file_id = f.id
+                WHERE f.category = 'video' AND m.file_id IS NULL
+                ORDER BY f.mtime DESC
+                LIMIT ?;
+            """, (limit,))
+            return [dict(r) for r in cursor.fetchall()]
+
 

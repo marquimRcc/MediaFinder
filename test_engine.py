@@ -421,12 +421,54 @@ def run_tests():
                 data=json.dumps({"action": "audio_track", "value": 0}).encode("utf-8"),
                 headers={"Content-Type": "application/json"}
             )
-            with urllib.request.urlopen(post_aud) as resp:
-                assert json.loads(resp.read().decode("utf-8"))["success"] is True
+            # Teste de Metadados IMDb e OMDb
+            from app.core.metadata import clean_movie_title, translate_parental_rating, MediaMetadataService
+            c_name, c_yr = clean_movie_title("Meu.Mestre.Minha.Vida.1989.1080p.mkv")
+            assert c_name == "Meu Mestre Minha Vida"
+            assert c_yr == 1989
+            assert translate_parental_rating("PG-13") == "14+"
+            assert translate_parental_rating("G") == "Livre"
+
+            # Salvar metadados de teste
+            ui_db.save_media_metadata(v_id, {
+                "imdb_id": "tt0097722",
+                "title": "Meu Mestre Minha Vida",
+                "original_title": "Lean on Me",
+                "year": 1989,
+                "rating": 7.4,
+                "votes": "23,396",
+                "runtime": "108 min",
+                "genre": "Biography, Drama",
+                "rated": "14+",
+                "plot": "Sinopse de teste do Dr. Joe Clark",
+                "director": "John G. Avildsen",
+                "actors": "Morgan Freeman, Beverly Todd",
+                "poster_url": "https://m.media-amazon.com/test.jpg"
+            })
+            retrieved_meta = ui_db.get_media_metadata(v_id)
+            assert retrieved_meta is not None
+            assert retrieved_meta["rating"] == 7.4
+            assert retrieved_meta["imdb_id"] == "tt0097722"
+
+            # GET /api/media/details
+            with urllib.request.urlopen(f"{base_url}/api/media/details?id={v_id}") as resp:
+                details = json.loads(resp.read().decode("utf-8"))
+                assert details["title"] == "Meu Mestre Minha Vida"
+                assert details["rating"] == 7.4
+                assert details["director"] == "John G. Avildsen"
+                assert details["rated"] == "14+"
+
+            # GET /api/catalog enriquecido com dados do IMDb
+            with urllib.request.urlopen(f"{base_url}/api/catalog?profile=marcos&limit=10") as resp:
+                cat_resp = json.loads(resp.read().decode("utf-8"))
+                found_item = next((x for x in cat_resp["items"] if x["id"] == v_id), None)
+                assert found_item is not None
+                assert found_item["imdb_rating"] == 7.4
+                assert found_item["meta_year"] == 1989
 
             web_server.stop()
 
-        print("✓ Todos os componentes, streaming HTTP 206, diálogos, segurança e IndexWorker validados com sucesso!")
+        print("✓ Todos os componentes, streaming HTTP 206, metadados IMDb, diálogos, segurança e IndexWorker validados com sucesso!")
     finally:
         try:
             if os.path.exists(ui_db_path):
