@@ -26,6 +26,7 @@ class ResultsTableView(QTableWidget):
     item_selected = Signal(dict)       # Emitido ao selecionar uma linha (para o preview)
     file_activated = Signal(dict)      # Emitido ao dar duplo clique ou Enter
     delete_requested = Signal(list)    # Emitido ao solicitar exclusão de um ou mais arquivos selecionados
+    cast_requested = Signal(str)       # Emitido com o path para transmitir para TV
 
     COLUMNS = [
         ("Tipo", 44),
@@ -202,6 +203,10 @@ class ResultsTableView(QTableWidget):
             f = selected_files[0]
             act_open = menu.addAction("🚀 Abrir Arquivo")
             act_open.triggered.connect(lambda: open_file(f.get("path", "")))
+
+            if f.get("category") in ("video", "audio"):
+                act_cast = menu.addAction("📡 Transmitir para TV...")
+                act_cast.triggered.connect(lambda: self.cast_requested.emit(f.get("path", "")))
 
             expl_label = "📂 Localizar no Windows Explorer" if sys.platform == "win32" else "📂 Localizar no Gerenciador de Arquivos"
             act_explorer = menu.addAction(expl_label)

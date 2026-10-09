@@ -20,6 +20,7 @@ from app.ui.preview_panel import PreviewPanel
 from app.ui.settings_dialog import SettingsDialog
 from app.ui.random_dialog import RandomMediaDialog
 from app.ui.tv_mode_window import TVModeWindow
+from app.ui.cast_dialog import CastDialog
 from app.utils.media_helpers import format_file_size
 from app.utils.system_ops import open_file
 
@@ -152,10 +153,12 @@ class MainWindow(QMainWindow):
         self.results_table = ResultsTableView()
         self.results_table.item_selected.connect(self._on_item_selected)
         self.results_table.delete_requested.connect(self._on_delete_files_requested)
+        self.results_table.cast_requested.connect(self._open_cast_dialog)
         self.splitter.addWidget(self.results_table)
 
         self.preview_panel = PreviewPanel()
         self.preview_panel.close_requested.connect(lambda: self._toggle_preview_panel(False))
+        self.preview_panel.cast_requested.connect(self._open_cast_dialog)
         self.splitter.addWidget(self.preview_panel)
 
         self.splitter.setCollapsible(0, False)
@@ -535,6 +538,16 @@ class MainWindow(QMainWindow):
             self.tv_window.setWindowState(self.tv_window.windowState() & ~Qt.WindowMinimized | Qt.WindowActive)
             self.tv_window.raise_()
             self.tv_window.activateWindow()
+
+    def _open_cast_dialog(self, file_path: str):
+        """Abre o diálogo de transmissão para TV para o arquivo indicado."""
+        if not file_path or not os.path.exists(file_path):
+            QMessageBox.warning(self, "Aviso", f"Arquivo não encontrado ou inacessível:\n{file_path}")
+            return
+        self.cast_dialog = CastDialog(file_path, parent=self)
+        if hasattr(self, 'app_icon'):
+            self.cast_dialog.setWindowIcon(self.app_icon)
+        self.cast_dialog.show()
 
     def closeEvent(self, event):
         """Salva dimensões e estado ao fechar."""

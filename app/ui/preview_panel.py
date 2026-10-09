@@ -54,6 +54,7 @@ class PreviewPanel(QFrame):
     """Painel lateral de prévia de imagem, metadados e ações rápidas."""
 
     close_requested = Signal()  # Emitido quando o usuário clica no ✕ do painel
+    cast_requested = Signal(str)  # Emitido com o file_path para transmitir para TV
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -178,6 +179,13 @@ class PreviewPanel(QFrame):
         self.btn_open.clicked.connect(self._on_open_file)
         actions_layout.addWidget(self.btn_open)
 
+        self.btn_cast = QPushButton("📡 Transmitir para TV...")
+        self.btn_cast.setObjectName("cast_action_btn")
+        self.btn_cast.setEnabled(False)
+        self.btn_cast.setToolTip("Transmitir este vídeo ou áudio para Smart TV (Chromecast, LG webOS, DLNA)")
+        self.btn_cast.clicked.connect(self._on_cast_file)
+        actions_layout.addWidget(self.btn_cast)
+
         expl_btn_label = "📂 Localizar no Explorer" if sys.platform == "win32" else "📂 Localizar na Pasta"
         self.btn_explorer = QPushButton(expl_btn_label)
         self.btn_explorer.setObjectName("explorer_action_btn")
@@ -226,6 +234,7 @@ class PreviewPanel(QFrame):
         self.lbl_path.setText(f"Caminho:\n{file_path}")
 
         self.btn_open.setEnabled(True)
+        self.btn_cast.setEnabled(cat in ("video", "audio"))
         self.btn_explorer.setEnabled(True)
         self.btn_copy_path.setEnabled(True)
         self.btn_copy_folder.setEnabled(True)
@@ -308,10 +317,16 @@ class PreviewPanel(QFrame):
         self.lbl_drive.setText("Unidade: -")
         self.lbl_path.setText("Caminho: -")
         self.btn_open.setEnabled(False)
+        self.btn_cast.setEnabled(False)
         self.btn_explorer.setEnabled(False)
         self.btn_copy_path.setEnabled(False)
         self.btn_copy_folder.setEnabled(False)
 
+    def _on_cast_file(self):
+        if self.current_file_data:
+            path = self.current_file_data.get("path", "")
+            if path:
+                self.cast_requested.emit(path)
 
     def _on_open_file(self):
         if self.current_file_data:
