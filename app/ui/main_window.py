@@ -58,6 +58,14 @@ class MainWindow(QMainWindow):
         self._setup_shortcuts()
         self._restore_previous_state()
 
+        # Inicia servidor local de streaming e acesso mobile
+        try:
+            from app.core.streamer import TVCastManager
+            self.cast_mgr = TVCastManager.get_instance(self.db)
+            self.cast_mgr.stream_server.start()
+        except Exception:
+            self.cast_mgr = None
+
         if self.config.get("auto_scan_on_startup", True):
             QTimer.singleShot(400, self.start_indexing)
 
@@ -606,4 +614,11 @@ class MainWindow(QMainWindow):
         self.config.set("window_height", self.height())
         self.config.set("window_maximized", self.isMaximized())
         self.config.set("preview_visible", self.preview_panel.isVisible())
+
+        if hasattr(self, 'cast_mgr') and self.cast_mgr:
+            try:
+                self.cast_mgr.stream_server.stop()
+            except Exception:
+                pass
+
         super().closeEvent(event)

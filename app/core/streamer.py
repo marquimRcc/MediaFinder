@@ -493,10 +493,10 @@ class MediaStreamServer:
         self.host_ip = get_local_ip()
 
         try:
-            self.httpd = ThreadedHTTPServer((self.host_ip, self.desired_port), RangeHTTPRequestHandler)
+            self.httpd = ThreadedHTTPServer(("", self.desired_port), RangeHTTPRequestHandler)
             self.actual_port = self.httpd.server_address[1]
         except OSError:
-            self.httpd = ThreadedHTTPServer((self.host_ip, 0), RangeHTTPRequestHandler)
+            self.httpd = ThreadedHTTPServer(("", 0), RangeHTTPRequestHandler)
             self.actual_port = self.httpd.server_address[1]
 
         self.httpd.media_server = self
