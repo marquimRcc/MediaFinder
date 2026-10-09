@@ -214,7 +214,9 @@ class RangeHTTPRequestHandler(BaseHTTPRequestHandler):
             profile_id = query_params.get("profile", [""])[0]
             is_kids_param = query_params.get("is_kids", ["0"])[0]
             is_kids = (is_kids_param == "1") or (profile_id == "kids")
-            cat = query_params.get("category", [None])[0]
+            cat = query_params.get("category", ["video"])[0]
+            if not cat or cat.lower() == "all":
+                cat = "video"
             query = query_params.get("query", [None])[0]
             limit = int(query_params.get("limit", [50])[0])
             offset = int(query_params.get("offset", [0])[0])

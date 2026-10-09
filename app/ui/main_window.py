@@ -48,7 +48,7 @@ class MainWindow(QMainWindow):
             self.showMaximized()
 
         self._current_query = self.config.get("last_search_query", "")
-        self._current_category = self.config.get("last_category_filter", "all")
+        self._current_category = "video"
         self._current_drive = self.config.get("last_drive_filter", "all")
         self._current_sort = "name_asc"
         self._preview_visible = self.config.get("preview_visible", True)

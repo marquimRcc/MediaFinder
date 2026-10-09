@@ -12,7 +12,7 @@ const App = {
   activeCastFileId: null,
   progressInterval: null,
   currentPlayingFileId: null,
-  selectedCategory: 'all',
+  selectedCategory: 'video',
   searchQuery: '',
 
   // Ícones de avatar
@@ -307,7 +307,7 @@ const App = {
         if (recentSection) recentSection.style.display = 'block';
       }
 
-      const cat = this.selectedCategory === 'all' ? '' : `&category=${this.selectedCategory}`;
+      const cat = `&category=${this.selectedCategory || 'video'}`;
       const query = isSearching ? `&query=${encodeURIComponent(this.searchQuery.trim())}` : '';
       const res = await fetch(`/api/catalog?profile=${this.currentProfile.id}${cat}${query}&limit=60`);
       const data = await res.json();

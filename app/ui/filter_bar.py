@@ -35,24 +35,21 @@ class FilterBar(QWidget):
         chips_layout.setContentsMargins(0, 0, 0, 0)
         chips_layout.setSpacing(6)
 
-        self.btn_group = QButtonGroup(self)
-        self.btn_group.setExclusive(True)
+        self.current_category = "video"
 
         self.CATEGORIES = [
-            ("all", "📁 Todos"),
-            ("video", "🎬 Vídeos"),
-            ("image", "🖼️ Fotos"),
-            ("audio", "🎵 Áudios"),
-            ("document", "📄 Docs"),
+            ("video", "🎬 Vídeos / Filmes"),
         ]
+
+        self.btn_group = QButtonGroup(self)
+        self.btn_group.setExclusive(True)
 
         self.chip_buttons = {}
         for cat_id, cat_label in self.CATEGORIES:
             btn = QPushButton(cat_label)
             btn.setProperty("class", "filter_chip")
             btn.setCheckable(True)
-            if cat_id == "all":
-                btn.setChecked(True)
+            btn.setChecked(True)
             btn.clicked.connect(lambda checked=False, cid=cat_id: self._on_category_clicked(cid))
             self.btn_group.addButton(btn)
             self.chip_buttons[cat_id] = btn
@@ -134,9 +131,10 @@ class FilterBar(QWidget):
 
     def set_category(self, cat_id: str):
         """Seleciona programaticamente a categoria."""
-        if cat_id in self.chip_buttons:
-            self.chip_buttons[cat_id].setChecked(True)
-            self.current_category = cat_id
+        target = cat_id if cat_id in self.chip_buttons else "video"
+        if target in self.chip_buttons:
+            self.chip_buttons[target].setChecked(True)
+            self.current_category = target
 
     def set_drive(self, drive_str: str):
         """Seleciona programaticamente o drive."""
