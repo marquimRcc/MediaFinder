@@ -196,7 +196,13 @@
       </div>
 
       <div class="remote-media-box">
-        <div class="remote-media-title" id="remote-media-title">Interestelar (2014)</div>
+        <div class="remote-poster-header">
+          <div class="remote-poster-thumbnail" id="remote-poster-thumbnail">🎬</div>
+          <div class="remote-media-meta">
+            <div class="remote-media-title" id="remote-media-title">Meu Mestre Minha Vida 1989</div>
+            <div class="remote-media-tag" id="remote-media-tag">Transmitindo na TV</div>
+          </div>
+        </div>
         <input type="range" class="remote-scrubber" id="remote-scrubber" min="0" max="100" value="0">
         <div class="remote-time-labels">
           <span id="remote-time-current">00:00:00</span>
@@ -216,6 +222,31 @@
         <span>🔈</span>
         <input type="range" class="volume-slider" id="remote-volume-slider" min="0" max="100" value="80">
         <span>🔊</span>
+      </div>
+
+      <!-- Seleção de Áudio e Legenda -->
+      <div class="remote-tracks-row">
+        <div class="track-box">
+          <label class="track-label">
+            <span>🔊</span>
+            <span>Áudio</span>
+          </label>
+          <select id="remote-audio-select" class="track-select">
+            <option value="0">Áudio Principal (Padrão)</option>
+            <option value="1">Áudio 2 / Original</option>
+          </select>
+        </div>
+
+        <div class="track-box">
+          <label class="track-label">
+            <span>💬</span>
+            <span>Legendas</span>
+          </label>
+          <select id="remote-subtitle-select" class="track-select">
+            <option value="-1">Desativada</option>
+            <option value="1" selected>Português (PT-BR)</option>
+          </select>
+        </div>
       </div>
 
       <button class="btn-disconnect" id="btn-remote-disconnect">

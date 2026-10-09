@@ -498,6 +498,34 @@ const App = {
 
         document.getElementById('btn-remote-play-pause').textContent = status.state === 'PLAYING' ? '⏸' : '▶';
         document.getElementById('remote-volume-slider').value = Math.round((status.volume || 1.0) * 100);
+
+        // Atualiza opções de áudio se disponíveis
+        const audioSel = document.getElementById('remote-audio-select');
+        if (audioSel && status.audio_tracks && (!audioSel.dataset.loaded || audioSel.dataset.loaded !== status.file_name)) {
+          audioSel.innerHTML = '';
+          status.audio_tracks.forEach(track => {
+            const opt = document.createElement('option');
+            opt.value = track.id;
+            opt.textContent = track.name;
+            if (track.id === status.active_audio_id) opt.selected = true;
+            audioSel.appendChild(opt);
+          });
+          audioSel.dataset.loaded = status.file_name;
+        }
+
+        // Atualiza opções de legenda se disponíveis
+        const subSel = document.getElementById('remote-subtitle-select');
+        if (subSel && status.subtitle_tracks && (!subSel.dataset.loaded || subSel.dataset.loaded !== status.file_name)) {
+          subSel.innerHTML = '';
+          status.subtitle_tracks.forEach(track => {
+            const opt = document.createElement('option');
+            opt.value = track.id;
+            opt.textContent = track.name;
+            if (track.id === status.active_subtitle_id) opt.selected = true;
+            subSel.appendChild(opt);
+          });
+          subSel.dataset.loaded = status.file_name;
+        }
       } else {
         document.getElementById('btn-cast-toggle').classList.remove('cast-active');
       }
@@ -597,6 +625,20 @@ const App = {
       this.sendRemoteControl('stop');
       this.closeRemoteModal();
     };
+
+    // Seletores de Áudio e Legenda
+    const audioSelect = document.getElementById('remote-audio-select');
+    if (audioSelect) {
+      audioSelect.onchange = (e) => {
+        this.sendRemoteControl('audio_track', parseInt(e.target.value));
+      };
+    }
+    const subSelect = document.getElementById('remote-subtitle-select');
+    if (subSelect) {
+      subSelect.onchange = (e) => {
+        this.sendRemoteControl('subtitle_track', parseInt(e.target.value));
+      };
+    }
 
     // Teclado PIN
     document.querySelectorAll('.key-btn[data-key]').forEach(btn => {

@@ -564,14 +564,17 @@ body {
 .remote-sheet {
   width: 100%;
   max-width: 480px;
+  min-height: 75vh;
+  max-height: 92vh;
   background: #0f172a;
   border-top-left-radius: 28px;
   border-top-right-radius: 28px;
   border: 1px solid var(--border-glass);
-  padding: 20px 20px 34px 20px;
-  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.8);
+  padding: 16px 20px 32px 20px;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.85);
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
   animation: slide-up 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -581,23 +584,23 @@ body {
 }
 
 .sheet-handle {
-  width: 40px;
+  width: 44px;
   height: 4px;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.25);
   border-radius: var(--radius-full);
   align-self: center;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 
 .remote-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
 }
 
 .remote-tv-name {
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -606,18 +609,53 @@ body {
 
 .remote-media-box {
   background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.remote-poster-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.remote-poster-thumbnail {
+  width: 54px;
+  height: 54px;
   border-radius: var(--radius-md);
-  padding: 14px;
-  margin-bottom: 20px;
+  background: linear-gradient(135deg, #1e1b4b, #312e81);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.remote-media-meta {
+  flex: 1;
+  min-width: 0;
 }
 
 .remote-media-title {
   font-size: 1.1rem;
   font-weight: 700;
-  margin-bottom: 12px;
+  margin-bottom: 4px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.remote-media-tag {
+  font-size: 0.75rem;
+  color: #818cf8;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .remote-scrubber {
@@ -721,6 +759,52 @@ body {
   border-radius: 50%;
   background: #fff;
   cursor: pointer;
+}
+
+/* SELEÇÃO DE FAIXAS DE ÁUDIO E LEGENDA */
+.remote-tracks-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.track-box {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.track-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.track-select {
+  background: #1e293b;
+  color: var(--text-main);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  outline: none;
+  width: 100%;
+  cursor: pointer;
+}
+
+.track-select:focus {
+  border-color: var(--accent-primary);
 }
 
 .btn-disconnect {

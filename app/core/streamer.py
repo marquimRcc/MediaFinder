@@ -267,7 +267,11 @@ class RangeHTTPRequestHandler(BaseHTTPRequestHandler):
                 "current_time": getattr(cast_mgr, "last_position", 0.0),
                 "duration": getattr(cast_mgr, "last_duration", 0.0),
                 "volume": getattr(cast_mgr, "last_volume", 1.0),
-                "is_muted": getattr(cast_mgr, "last_muted", False)
+                "is_muted": getattr(cast_mgr, "last_muted", False),
+                "audio_tracks": cast_mgr.get_audio_tracks(),
+                "subtitle_tracks": cast_mgr.get_subtitle_tracks(),
+                "active_audio_id": getattr(cast_mgr, "active_audio_id", 0),
+                "active_subtitle_id": getattr(cast_mgr, "active_subtitle_id", 1)
             }, 200, send_body)
             return
 
@@ -366,6 +370,10 @@ class RangeHTTPRequestHandler(BaseHTTPRequestHandler):
                 cast_mgr.set_volume(float(val))
             elif action == "stop":
                 cast_mgr.stop_cast()
+            elif action == "subtitle_track" and val is not None:
+                cast_mgr.set_subtitle_track(int(val))
+            elif action == "audio_track" and val is not None:
+                cast_mgr.set_audio_track(int(val))
 
             self._send_json_response({"success": True, "action": action})
             return
@@ -937,3 +945,70 @@ class TVCastManager(QObject):
                 self.active_chromecast.set_volume_muted(not curr)
             except Exception as e:
                 logger.debug(f"Erro ao mutar: {e}")
+
+    def get_subtitle_tracks(self) -> List[Dict[str, Any]]:
+        tracks = [{"id": -1, "name": "Desativada"}]
+        if self._current_file_path:
+            base_no_ext, _ = os.path.splitext(self._current_file_path)
+            folder = os.path.dirname(self._current_file_path)
+            base_name = os.path.basename(base_no_ext)
+            
+            # Legenda padrão do filme
+            if os.path.exists(base_no_ext + ".srt") or os.path.exists(base_no_ext + ".vtt"):
+                tracks.append({"id": 1, "name": "Português (PT-BR)"})
+
+            # Procura legendas adicionais na pasta
+            try:
+                for fname in os.listdir(folder):
+                    if fname.startswith(base_name) and fname.endswith((".srt", ".vtt")) and fname not in (base_name + ".srt", base_name + ".vtt"):
+                        lower = fname.lower()
+                        if "en" in lower or "eng" in lower:
+                            tracks.append({"id": 2, "name": "Inglês (EN)"})
+                        elif "es" in lower or "spa" in lower:
+                            tracks.append({"id": 3, "name": "Espanhol (ES)"})
+                        else:
+                            clean_tag = fname[len(base_name):].rstrip(".srt").rstrip(".vtt").strip("._- ")
+                            tracks.append({"id": len(tracks) + 1, "name": clean_tag.title() or "Faixa Extra"})
+            except Exception:
+                pass
+
+        if self.active_chromecast and self.active_chromecast.media_controller:
+            status = self.active_chromecast.media_controller.status
+            if status and getattr(status, "subtitle_tracks", None):
+                for t in status.subtitle_tracks:
+                    t_id = t.get("trackId")
+                    t_name = t.get("name") or t.get("language") or f"Legenda {t_id}"
+                    if not any(x["id"] == t_id for x in tracks):
+                        tracks.append({"id": t_id, "name": t_name})
+        return tracks
+
+    def get_audio_tracks(self) -> List[Dict[str, Any]]:
+        return [
+            {"id": 0, "name": "Áudio Principal / 5.1 Dublado"},
+            {"id": 1, "name": "Áudio 2 / Original"}
+        ]
+
+    def set_subtitle_track(self, track_id: int):
+        self.active_subtitle_id = track_id
+        if self.active_chromecast and self.active_chromecast.media_controller:
+            mc = self.active_chromecast.media_controller
+            try:
+                if track_id == -1:
+                    mc.disable_subtitle()
+                else:
+                    mc.enable_subtitle(track_id)
+            except Exception as e:
+                logger.debug(f"Erro ao alterar legenda: {e}")
+
+    def set_audio_track(self, track_id: int):
+        self.active_audio_id = track_id
+        if self.active_chromecast and self.active_chromecast.media_controller:
+            mc = self.active_chromecast.media_controller
+            try:
+                active_ids = [track_id]
+                if getattr(self, "active_subtitle_id", -1) != -1:
+                    active_ids.append(self.active_subtitle_id)
+                mc._send_command({"type": "EDIT_TRACKS_INFO", "activeTrackIds": active_ids}, None)
+            except Exception as e:
+                logger.debug(f"Erro ao alternar áudio: {e}")
+

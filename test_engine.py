@@ -404,6 +404,25 @@ def run_tests():
                 cast_st = json.loads(resp.read().decode("utf-8"))
                 assert "is_casting" in cast_st
                 assert "state" in cast_st
+                assert "audio_tracks" in cast_st
+                assert "subtitle_tracks" in cast_st
+
+            # POST /api/cast/control (áudio e legenda)
+            post_sub = urllib.request.Request(
+                f"{base_url}/api/cast/control",
+                data=json.dumps({"action": "subtitle_track", "value": -1}).encode("utf-8"),
+                headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(post_sub) as resp:
+                assert json.loads(resp.read().decode("utf-8"))["success"] is True
+
+            post_aud = urllib.request.Request(
+                f"{base_url}/api/cast/control",
+                data=json.dumps({"action": "audio_track", "value": 0}).encode("utf-8"),
+                headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(post_aud) as resp:
+                assert json.loads(resp.read().decode("utf-8"))["success"] is True
 
             web_server.stop()
 
