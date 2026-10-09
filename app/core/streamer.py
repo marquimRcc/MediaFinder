@@ -143,7 +143,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 class MediaStreamServer:
     """Servidor HTTP embutido para disponibilizar mídias na rede local para as TVs."""
 
-    def __init__(self, port: int = 8765):
+    def __init__(self, port: int = 1745):
         self.desired_port = port
         self.host_ip = get_local_ip()
         self.httpd: Optional[ThreadedHTTPServer] = None
