@@ -330,13 +330,18 @@ class SettingsDialog(QDialog):
         details_layout = QVBoxLayout()
         details_layout.setSpacing(8)
 
-        lbl_author = QLabel("👤 <b>Desenvolvedor:</b> Jairo Ivo (<a href='https://github.com/xToshiro' style='color: #38BDF8; text-decoration: none;'>@xToshiro</a>)")
+        lbl_author = QLabel(
+            "👤 <b>Desenvolvedor:</b> Jairo Ivo (<a href='https://github.com/xToshiro' style='color: #38BDF8; text-decoration: none;'>@xToshiro</a>) • "
+            "<b>Modificado por:</b> <a href='https://github.com/marquimRcc' style='color: #38BDF8; text-decoration: none;'>Marquim.rcc</a> com Antigravity 3.8"
+        )
         lbl_author.setOpenExternalLinks(True)
+        lbl_author.setWordWrap(True)
         lbl_author.setStyleSheet("font-size: 13px; color: #E2E8F0;")
         details_layout.addWidget(lbl_author)
 
-        lbl_repo = QLabel("🌐 <b>Repositório Oficial:</b> <a href='https://github.com/xToshiro/MediaFinder' style='color: #38BDF8; text-decoration: underline;'>https://github.com/xToshiro/MediaFinder</a>")
+        lbl_repo = QLabel("🌐 <b>Repositório:</b> <a href='https://github.com/marquimRcc/MediaFinder' style='color: #38BDF8; text-decoration: underline;'>https://github.com/marquimRcc/MediaFinder</a>")
         lbl_repo.setOpenExternalLinks(True)
+        lbl_repo.setWordWrap(True)
         lbl_repo.setStyleSheet("font-size: 13px; color: #E2E8F0;")
         details_layout.addWidget(lbl_repo)
 
@@ -376,13 +381,13 @@ class SettingsDialog(QDialog):
 
 
     def _open_github_repo(self):
-        QDesktopServices.openUrl(QUrl("https://github.com/xToshiro/MediaFinder"))
+        QDesktopServices.openUrl(QUrl("https://github.com/marquimRcc/MediaFinder"))
 
     def _copy_repo_link(self):
         from PySide6.QtWidgets import QApplication
         clipboard = QApplication.clipboard()
         if clipboard:
-            clipboard.setText("https://github.com/xToshiro/MediaFinder")
+            clipboard.setText("https://github.com/marquimRcc/MediaFinder")
             QMessageBox.information(self, "Copiado", "Link do repositório copiado para a área de transferência!")
 
     def _load_data(self):
