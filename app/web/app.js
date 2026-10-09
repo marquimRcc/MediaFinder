@@ -269,16 +269,69 @@ const App = {
     }
   },
 
+  escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  },
+
+  clearSearch() {
+    const input = document.getElementById('search-input');
+    const clearBtn = document.getElementById('btn-search-clear');
+    if (input) input.value = '';
+    if (clearBtn) clearBtn.style.display = 'none';
+    this.searchQuery = '';
+    this.loadCatalog();
+    this.loadContinueWatching();
+  },
+
+  clearKidsSearch() {
+    const input = document.getElementById('kids-search-input');
+    const clearBtn = document.getElementById('kids-btn-search-clear');
+    if (input) input.value = '';
+    if (clearBtn) clearBtn.style.display = 'none';
+    this.searchQuery = '';
+    this.loadKidsContent();
+  },
+
   async loadCatalog() {
     try {
+      const isSearching = !!(this.searchQuery && this.searchQuery.trim());
+      const heroSection = document.getElementById('hero-continue');
+      const recentSection = document.getElementById('carousel-recent')?.closest('section');
+
+      // Se estiver buscando, esconde banner e carrossel de recentes para focar na lista pesquisada
+      if (isSearching) {
+        if (heroSection) heroSection.style.display = 'none';
+        if (recentSection) recentSection.style.display = 'none';
+      } else {
+        if (recentSection) recentSection.style.display = 'block';
+      }
+
       const cat = this.selectedCategory === 'all' ? '' : `&category=${this.selectedCategory}`;
-      const query = this.searchQuery ? `&query=${encodeURIComponent(this.searchQuery)}` : '';
-      const res = await fetch(`/api/catalog?profile=${this.currentProfile.id}${cat}${query}&limit=30`);
+      const query = isSearching ? `&query=${encodeURIComponent(this.searchQuery.trim())}` : '';
+      const res = await fetch(`/api/catalog?profile=${this.currentProfile.id}${cat}${query}&limit=60`);
       const data = await res.json();
       const container = document.getElementById('catalog-grid');
       container.innerHTML = '';
 
-      (data.items || []).forEach(item => {
+      if (!data.items || data.items.length === 0) {
+        if (isSearching) {
+          container.innerHTML = `
+            <div class="search-empty-state">
+              <div class="empty-icon">🔍</div>
+              <div class="empty-title">Nenhum resultado para "${this.escapeHtml(this.searchQuery)}"</div>
+              <div class="empty-desc">Não encontramos vídeos ou arquivos com este nome no seu acervo local.</div>
+              <button class="btn-clear-search" id="btn-empty-clear">Limpar busca e ver tudo</button>
+            </div>
+          `;
+          document.getElementById('btn-empty-clear')?.addEventListener('click', () => this.clearSearch());
+        } else {
+          container.innerHTML = '<div style="color: var(--text-muted); padding: 20px; text-align: center;">Nenhum arquivo encontrado nesta categoria.</div>';
+        }
+        return;
+      }
+
+      data.items.forEach(item => {
         container.appendChild(this.createMediaCard(item));
       });
     } catch (e) {
@@ -288,22 +341,45 @@ const App = {
 
   async loadKidsContent() {
     try {
-      const query = this.searchQuery ? `&query=${encodeURIComponent(this.searchQuery)}` : '';
-      const res = await fetch(`/api/catalog?profile=kids&is_kids=1${query}&limit=30`);
+      const isSearching = !!(this.searchQuery && this.searchQuery.trim());
+      const cartoonSec = document.getElementById('kids-carousel-cartoons')?.closest('section');
+      if (cartoonSec) cartoonSec.style.display = isSearching ? 'none' : 'block';
+
+      const query = isSearching ? `&query=${encodeURIComponent(this.searchQuery.trim())}` : '';
+      const res = await fetch(`/api/catalog?profile=kids&is_kids=1${query}&limit=60`);
       const data = await res.json();
 
       const cartoonsContainer = document.getElementById('kids-carousel-cartoons');
       const gridContainer = document.getElementById('kids-catalog-grid');
-      cartoonsContainer.innerHTML = '';
+      if (cartoonsContainer) cartoonsContainer.innerHTML = '';
       gridContainer.innerHTML = '';
 
       const items = data.items || [];
-      items.slice(0, 10).forEach(item => {
-        cartoonsContainer.appendChild(this.createMediaCard(item, true));
-      });
-      items.slice(10).forEach(item => {
-        gridContainer.appendChild(this.createMediaCard(item, true));
-      });
+      if (items.length === 0) {
+        gridContainer.innerHTML = `
+          <div class="search-empty-state">
+            <div class="empty-icon">🦁</div>
+            <div class="empty-title">Nenhum desenho para "${this.escapeHtml(this.searchQuery)}"</div>
+            <div class="empty-desc">Tente procurar com outro nome infantil.</div>
+            <button class="btn-clear-search" id="kids-btn-empty-clear">Limpar busca e ver todos</button>
+          </div>
+        `;
+        document.getElementById('kids-btn-empty-clear')?.addEventListener('click', () => this.clearKidsSearch());
+        return;
+      }
+
+      if (isSearching) {
+        items.forEach(item => {
+          gridContainer.appendChild(this.createMediaCard(item, true));
+        });
+      } else {
+        items.slice(0, 10).forEach(item => {
+          cartoonsContainer.appendChild(this.createMediaCard(item, true));
+        });
+        items.slice(10).forEach(item => {
+          gridContainer.appendChild(this.createMediaCard(item, true));
+        });
+      }
     } catch (e) {
       console.error('Erro ao carregar catálogo kids:', e);
     }
@@ -805,21 +881,87 @@ const App = {
       };
     });
 
-    // Busca com debounce
-    const handleSearch = (e) => {
-      clearTimeout(this.searchDebounceTimer);
-      this.searchDebounceTimer = setTimeout(() => {
-        this.searchQuery = e.target.value.trim();
-        if (this.currentProfile && this.currentProfile.is_kids) {
-          this.loadKidsContent();
-        } else {
-          this.loadCatalog();
-        }
-      }, 350);
+    // Busca na Home (Adulto/Geral)
+    const searchForm = document.getElementById('search-form');
+    const searchInput = document.getElementById('search-input');
+    const clearBtn = document.getElementById('btn-search-clear');
+
+    const executeSearch = (val) => {
+      this.searchQuery = (val || '').trim();
+      if (clearBtn) clearBtn.style.display = this.searchQuery ? 'flex' : 'none';
+      if (searchInput) searchInput.blur(); // Fecha o teclado virtual no celular
+      this.loadCatalog();
     };
 
-    document.getElementById('search-input').oninput = handleSearch;
-    document.getElementById('kids-search-input').oninput = handleSearch;
+    if (searchForm) {
+      searchForm.onsubmit = (e) => {
+        e.preventDefault();
+        executeSearch(searchInput ? searchInput.value : '');
+      };
+    }
+
+    if (searchInput) {
+      searchInput.oninput = (e) => {
+        const val = e.target.value;
+        if (clearBtn) clearBtn.style.display = val.trim() ? 'flex' : 'none';
+        clearTimeout(this.searchDebounceTimer);
+        this.searchDebounceTimer = setTimeout(() => {
+          this.searchQuery = val.trim();
+          this.loadCatalog();
+        }, 350);
+      };
+      searchInput.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          executeSearch(searchInput.value);
+        }
+      };
+    }
+
+    if (clearBtn) {
+      clearBtn.onclick = () => this.clearSearch();
+    }
+
+    // Busca no Espaço Kids
+    const kidsSearchForm = document.getElementById('kids-search-form');
+    const kidsSearchInput = document.getElementById('kids-search-input');
+    const kidsClearBtn = document.getElementById('kids-btn-search-clear');
+
+    const executeKidsSearch = (val) => {
+      this.searchQuery = (val || '').trim();
+      if (kidsClearBtn) kidsClearBtn.style.display = this.searchQuery ? 'flex' : 'none';
+      if (kidsSearchInput) kidsSearchInput.blur(); // Fecha o teclado virtual
+      this.loadKidsContent();
+    };
+
+    if (kidsSearchForm) {
+      kidsSearchForm.onsubmit = (e) => {
+        e.preventDefault();
+        executeKidsSearch(kidsSearchInput ? kidsSearchInput.value : '');
+      };
+    }
+
+    if (kidsSearchInput) {
+      kidsSearchInput.oninput = (e) => {
+        const val = e.target.value;
+        if (kidsClearBtn) kidsClearBtn.style.display = val.trim() ? 'flex' : 'none';
+        clearTimeout(this.searchDebounceTimer);
+        this.searchDebounceTimer = setTimeout(() => {
+          this.searchQuery = val.trim();
+          this.loadKidsContent();
+        }, 350);
+      };
+      kidsSearchInput.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          executeKidsSearch(kidsSearchInput.value);
+        }
+      };
+    }
+
+    if (kidsClearBtn) {
+      kidsClearBtn.onclick = () => this.clearKidsSearch();
+    }
   }
 };
 

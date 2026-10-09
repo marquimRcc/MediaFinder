@@ -66,6 +66,48 @@ def translate_parental_rating(rated: Optional[str]) -> str:
         return "16+"
     return rated
 
+GENRE_MAP = {
+    'Action': 'Ação', 'Adventure': 'Aventura', 'Animation': 'Animação',
+    'Biography': 'Biografia', 'Comedy': 'Comédia', 'Crime': 'Crime',
+    'Documentary': 'Documentário', 'Drama': 'Drama', 'Family': 'Família',
+    'Fantasy': 'Fantasia', 'Film-Noir': 'Policial / Noir', 'History': 'História',
+    'Horror': 'Terror', 'Music': 'Música', 'Musical': 'Musical',
+    'Mystery': 'Mistério', 'Romance': 'Romance', 'Sci-Fi': 'Ficção Científica',
+    'Short': 'Curta-metragem', 'Sport': 'Esporte', 'Superhero': 'Super-herói',
+    'Thriller': 'Suspense', 'War': 'Guerra', 'Western': 'Faroeste'
+}
+
+def translate_genres(genre_str: Optional[str]) -> Optional[str]:
+    if not genre_str or genre_str == 'N/A':
+        return None
+    parts = [p.strip() for p in genre_str.split(',')]
+    return ', '.join([GENRE_MAP.get(p, p) for p in parts])
+
+def format_runtime_pt(runtime_str: Optional[str]) -> Optional[str]:
+    if not runtime_str or runtime_str == 'N/A':
+        return None
+    m = re.search(r'(\d+)\s*min', runtime_str, re.IGNORECASE)
+    if m:
+        mins = int(m.group(1))
+        h = mins // 60
+        r = mins % 60
+        return f'{h}h {r}min' if h > 0 else f'{r}min'
+    return runtime_str
+
+def translate_to_pt(text: Optional[str]) -> Optional[str]:
+    if not text or text.strip() in ['', 'N/A']:
+        return None
+    url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=pt&dt=t&q=' + urllib.parse.quote(text)
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+            return ''.join([part[0] for part in data[0] if part[0]]).strip() or text
+    except Exception as e:
+        logger.debug(f'Falha na tradução para PT: {e}')
+        return text
+
+
 class MediaMetadataService:
     """Gerencia consultas ao IMDb, enriquecimento de capas e cache local de pôsteres."""
 
@@ -161,10 +203,11 @@ class MediaMetadataService:
                     except (ValueError, TypeError):
                         pass
                     result["votes"] = omdb_data.get("imdbVotes")
-                    result["runtime"] = omdb_data.get("Runtime")
-                    result["genre"] = omdb_data.get("Genre")
+                    result["runtime"] = format_runtime_pt(omdb_data.get("Runtime"))
+                    result["genre"] = translate_genres(omdb_data.get("Genre"))
                     result["rated"] = translate_parental_rating(omdb_data.get("Rated"))
-                    result["plot"] = omdb_data.get("Plot")
+                    raw_plot = omdb_data.get("Plot")
+                    result["plot"] = translate_to_pt(raw_plot) if raw_plot and raw_plot != "N/A" else None
                     result["director"] = omdb_data.get("Director")
                     if omdb_data.get("Actors") and omdb_data.get("Actors") != "N/A":
                         result["actors"] = omdb_data.get("Actors")

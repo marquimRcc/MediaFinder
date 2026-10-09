@@ -55,10 +55,14 @@
   <main class="view-screen" id="view-home">
     <!-- Busca e Filtros -->
     <div class="search-container">
-      <div class="search-input-wrapper">
-        <span class="search-icon">🔍</span>
-        <input type="text" id="search-input" class="search-input" placeholder="Buscar filmes, séries, animes..." autocomplete="off">
-      </div>
+      <form class="search-form" id="search-form" action="javascript:void(0);">
+        <div class="search-input-wrapper">
+          <span class="search-icon">🔍</span>
+          <input type="search" id="search-input" class="search-input" placeholder="Buscar filmes, séries, animes..." autocomplete="off" enterkeyhint="search">
+          <button type="button" class="btn-search-clear" id="btn-search-clear" style="display: none;" title="Limpar busca">✕</button>
+        </div>
+        <button type="submit" class="btn-search-submit" id="btn-search-submit">Buscar</button>
+      </form>
       <div class="filter-pills" id="filter-pills">
         <button class="pill active" data-category="all">Todos</button>
         <button class="pill" data-category="video">Vídeos & Filmes</button>
@@ -126,10 +130,14 @@
 
     <!-- Busca Kids -->
     <div class="search-container">
-      <div class="search-input-wrapper">
-        <span class="search-icon">🔍</span>
-        <input type="text" id="kids-search-input" class="search-input" placeholder="Buscar desenhos favoritos..." autocomplete="off">
-      </div>
+      <form class="search-form" id="kids-search-form" action="javascript:void(0);">
+        <div class="search-input-wrapper">
+          <span class="search-icon">🔍</span>
+          <input type="search" id="kids-search-input" class="search-input" placeholder="Buscar desenhos favoritos..." autocomplete="off" enterkeyhint="search">
+          <button type="button" class="btn-search-clear" id="kids-btn-search-clear" style="display: none;" title="Limpar busca">✕</button>
+        </div>
+        <button type="submit" class="btn-search-submit" id="kids-btn-search-submit">Buscar</button>
+      </form>
     </div>
 
     <!-- Carrossel de Desenhos Kids -->

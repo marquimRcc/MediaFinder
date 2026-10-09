@@ -262,10 +262,17 @@ body {
   margin-bottom: 20px;
 }
 
+.search-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .search-input-wrapper {
   position: relative;
   display: flex;
   align-items: center;
+  flex: 1;
 }
 
 .search-icon {
@@ -273,11 +280,12 @@ body {
   left: 14px;
   color: var(--text-sub);
   font-size: 1.1rem;
+  pointer-events: none;
 }
 
 .search-input {
   width: 100%;
-  padding: 12px 14px 12px 42px;
+  padding: 12px 38px 12px 42px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border-glass);
   border-radius: var(--radius-md);
@@ -286,6 +294,86 @@ body {
   outline: none;
   transition: all 0.2s;
   user-select: text;
+}
+
+.btn-search-clear {
+  position: absolute;
+  right: 12px;
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  color: #fff;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.btn-search-submit {
+  padding: 12px 18px;
+  background: var(--accent-primary);
+  border: none;
+  border-radius: var(--radius-md);
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+  transition: opacity 0.2s;
+}
+
+.btn-search-submit:active {
+  opacity: 0.85;
+}
+
+/* Estado Vazio de Busca */
+.search-empty-state {
+  width: 100%;
+  padding: 36px 20px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed var(--border-glass);
+  border-radius: var(--radius-lg);
+  margin-top: 10px;
+}
+
+.empty-icon {
+  font-size: 3rem;
+  margin-bottom: 2px;
+  opacity: 0.7;
+}
+
+.empty-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.empty-desc {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  max-width: 320px;
+  line-height: 1.4;
+}
+
+.btn-clear-search {
+  margin-top: 6px;
+  padding: 10px 18px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  color: var(--text-main);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
 }
 
 .search-input:focus {
