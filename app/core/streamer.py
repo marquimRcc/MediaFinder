@@ -314,7 +314,25 @@ class RangeHTTPRequestHandler(BaseHTTPRequestHandler):
                         "backdrop_url": None
                     }
 
-            self._send_json_response(meta or {}, 200, send_body)
+            details = dict(meta or {})
+            profile_id = query_params.get("profile", ["marcos"])[0]
+            prog = db.get_playback_progress(profile_id, file_id)
+            if prog:
+                pos = float(prog.get("position_seconds", 0.0))
+                dur = float(prog.get("duration_seconds", 0.0))
+                if pos >= 10.0 and (dur <= 0 or pos < dur * 0.95):
+                    details["saved_position"] = pos
+                    details["saved_duration"] = dur
+
+            self._send_json_response(details, 200, send_body)
+            return
+
+        # GET /api/playback/progress?profile=<id>&file_id=<id>
+        if path == "/api/playback/progress":
+            profile_id = query_params.get("profile", ["marcos"])[0]
+            file_id = int(query_params.get("file_id", [0])[0])
+            prog = db.get_playback_progress(profile_id, file_id) if file_id > 0 else None
+            self._send_json_response(prog or {}, 200, send_body)
             return
 
         # GET /api/cast/devices
@@ -428,8 +446,23 @@ class RangeHTTPRequestHandler(BaseHTTPRequestHandler):
 
             cast_mgr.active_profile_id = profile_id
             cast_mgr._current_file_id = file_id
-            cast_mgr.cast_media(device, row["path"])
-            self._send_json_response({"success": True, "device": device.name})
+            if not getattr(cast_mgr, "db", None):
+                cast_mgr.db = db
+
+            # Retoma de onde parou se houver progresso salvo e não for forçado do início
+            start_time = float(body.get("start_time", -1.0))
+            if start_time < 0 and file_id > 0:
+                prog = db.get_playback_progress(profile_id, file_id)
+                if prog:
+                    pos = float(prog.get("position_seconds", 0.0))
+                    dur = float(prog.get("duration_seconds", 0.0))
+                    if pos >= 10.0 and (dur <= 0 or pos < dur * 0.95):
+                        start_time = pos
+            if start_time < 0:
+                start_time = 0.0
+
+            cast_mgr.cast_media(device, row["path"], start_time=start_time)
+            self._send_json_response({"success": True, "device": device.name, "start_time": start_time})
             return
 
         # POST /api/cast/control
@@ -846,7 +879,7 @@ class TVCastManager(QObject):
 
         threading.Thread(target=_worker, daemon=True).start()
 
-    def cast_media(self, device: TVDevice, file_path: str):
+    def cast_media(self, device: TVDevice, file_path: str, start_time: float = 0.0):
         if not os.path.isfile(file_path):
             self.error_occurred.emit(f"Arquivo não encontrado: {file_path}")
             return
@@ -855,6 +888,7 @@ class TVCastManager(QObject):
             try:
                 self.active_cast_device = device
                 self._current_file_path = file_path
+                self.last_position = start_time
                 file_name = os.path.basename(file_path)
 
                 media_url = self.stream_server.register_file(file_path)
@@ -909,11 +943,20 @@ class TVCastManager(QObject):
                     media_url,
                     content_type=mime,
                     title=file_name,
+                    current_time=start_time if start_time > 0 else None,
                     stream_type="BUFFERED",
                     subtitles=sub_url,
                     subtitles_lang="pt-BR"
                 )
                 mc.block_until_active(timeout=8.0)
+
+                # Busca a posição inicial caso o receiver da Smart TV inicialize no tempo zero
+                if start_time > 0:
+                    try:
+                        time.sleep(1.2)
+                        mc.seek(start_time)
+                    except Exception as seek_err:
+                        logger.debug(f"Aviso ao buscar posição inicial na TV: {seek_err}")
 
                 self.is_casting = True
                 self.cast_started.emit(device.name, file_name)

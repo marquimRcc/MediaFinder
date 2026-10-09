@@ -1311,6 +1311,34 @@ body {
   background: rgba(255, 255, 255, 0.14);
 }
 
+.details-restart-container {
+  display: flex;
+  justify-content: center;
+  margin-top: -10px;
+  margin-bottom: 20px;
+}
+
+.btn-details-restart {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 6px 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.btn-details-restart:active {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--text-main);
+  transform: scale(0.97);
+}
+
 /* Sinopse e Elenco */
 .details-section {
   margin-bottom: 20px;

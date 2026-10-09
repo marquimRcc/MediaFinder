@@ -243,7 +243,7 @@ const App = {
         document.getElementById('hero-progress-bar').style.width = `${item.progress_percent}%`;
 
         document.getElementById('btn-hero-play-local').onclick = () => this.playLocal(item.id, item.position_seconds);
-        document.getElementById('btn-hero-cast').onclick = () => this.openCastDevicesModal(item.id);
+        document.getElementById('btn-hero-cast').onclick = () => this.openCastDevicesModal(item.id, item.position_seconds);
 
         heroEl.style.display = 'block';
       } else {
@@ -459,8 +459,11 @@ const App = {
       document.getElementById('details-imdb-badge').style.display = 'none';
       document.getElementById('details-rated-badge').style.display = 'none';
       document.getElementById('details-cast-list').innerHTML = '';
+      const restartContainer = document.getElementById('details-restart-container');
+      if (restartContainer) restartContainer.style.display = 'none';
 
-      const res = await fetch(`/api/media/details?id=${fileId}`);
+      const profileParam = this.currentProfile ? `&profile=${encodeURIComponent(this.currentProfile.id)}` : '';
+      const res = await fetch(`/api/media/details?id=${fileId}${profileParam}`);
       const data = await res.json();
 
       document.getElementById('details-title').textContent = data.title || 'Filme';
@@ -522,14 +525,39 @@ const App = {
         document.getElementById('details-cast-section').style.display = 'none';
       }
 
-      document.getElementById('btn-details-play').onclick = () => {
+      const playBtn = document.getElementById('btn-details-play');
+      const castBtn = document.getElementById('btn-details-cast');
+      const playLabel = document.getElementById('btn-details-play-label');
+      const castLabel = document.getElementById('btn-details-cast-label');
+      const restartBtn = document.getElementById('btn-details-restart');
+
+      const savedPos = (data.saved_position && data.saved_position >= 10.0) ? data.saved_position : null;
+
+      if (savedPos) {
+        const timeFormatted = this.formatTime(savedPos);
+        if (playLabel) playLabel.textContent = `Continuar (${timeFormatted})`;
+        if (castLabel) castLabel.textContent = `Continuar na TV (${timeFormatted})`;
+        if (restartContainer) restartContainer.style.display = 'flex';
+      } else {
+        if (playLabel) playLabel.textContent = 'Assistir no Celular';
+        if (castLabel) castLabel.textContent = 'Transmitir na TV';
+        if (restartContainer) restartContainer.style.display = 'none';
+      }
+
+      playBtn.onclick = () => {
         this.closeMediaDetails();
-        this.playLocal(data.file_id || fileId);
+        this.playLocal(data.file_id || fileId, savedPos);
       };
-      document.getElementById('btn-details-cast').onclick = () => {
+      castBtn.onclick = () => {
         this.closeMediaDetails();
-        this.openCastDevicesModal(data.file_id || fileId);
+        this.openCastDevicesModal(data.file_id || fileId, savedPos);
       };
+      if (restartBtn) {
+        restartBtn.onclick = () => {
+          this.closeMediaDetails();
+          this.playLocal(data.file_id || fileId, 0.001);
+        };
+      }
 
     } catch (e) {
       console.error('Erro ao abrir detalhes do filme:', e);
@@ -543,20 +571,39 @@ const App = {
   // =========================================================================
   // REPRODUÇÃO LOCAL NO CELULAR (HTML5 VIDEO)
   // =========================================================================
-  playLocal(fileId, startTime = 0) {
+  async playLocal(fileId, startTime = null) {
     this.currentPlayingFileId = fileId;
     const modal = document.getElementById('modal-player');
     const video = document.getElementById('html5-video');
 
+    let resumeTime = (typeof startTime === 'number' && startTime > 0) ? startTime : 0;
+    // Se não foi passado startTime (ou for null), busca progresso salvo no backend
+    if ((startTime === null || startTime === undefined) && this.currentProfile) {
+      try {
+        const res = await fetch(`/api/playback/progress?profile=${encodeURIComponent(this.currentProfile.id)}&file_id=${fileId}`);
+        const prog = await res.json();
+        if (prog && prog.position_seconds >= 10.0 && (!prog.duration_seconds || prog.position_seconds < prog.duration_seconds * 0.95)) {
+          resumeTime = prog.position_seconds;
+        }
+      } catch (e) {
+        console.debug('Erro ao carregar progresso salvo:', e);
+      }
+    }
+
     video.src = `/api/media/${fileId}/stream`;
     modal.classList.add('active');
 
-    video.onloadedmetadata = () => {
-      if (startTime > 0) {
-        video.currentTime = startTime;
+    let seekApplied = false;
+    const applySeek = () => {
+      if (resumeTime > 0 && !seekApplied) {
+        video.currentTime = resumeTime;
+        seekApplied = true;
       }
       video.play().catch(() => {});
     };
+
+    video.onloadedmetadata = applySeek;
+    video.oncanplay = applySeek;
 
     // Salva progresso a cada 5 segundos
     clearInterval(this.progressInterval);
@@ -603,8 +650,9 @@ const App = {
   // =========================================================================
   // CONTROLE REMOTO CAST PARA SMART TV
   // =========================================================================
-  async openCastDevicesModal(fileId) {
+  async openCastDevicesModal(fileId, startTime = null) {
     this.activeCastFileId = fileId;
+    this.activeCastStartTime = startTime;
     const modal = document.getElementById('modal-devices');
     modal.classList.add('active');
     await this.fetchDevices();
@@ -641,14 +689,18 @@ const App = {
 
   async startCast(deviceId) {
     try {
+      const payload = {
+        device_id: deviceId,
+        file_id: this.activeCastFileId,
+        profile_id: this.currentProfile ? this.currentProfile.id : 'marcos'
+      };
+      if (this.activeCastStartTime !== null && this.activeCastStartTime !== undefined) {
+        payload.start_time = this.activeCastStartTime;
+      }
       const res = await fetch('/api/cast/play', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          device_id: deviceId,
-          file_id: this.activeCastFileId,
-          profile_id: this.currentProfile ? this.currentProfile.id : 'marcos'
-        })
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (data.success) {
