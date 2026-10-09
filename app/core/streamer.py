@@ -30,6 +30,8 @@ EXTRA_MIME_TYPES = {
     ".ogg": "audio/ogg",
     ".flac": "audio/flac",
     ".wav": "audio/wav",
+    ".vtt": "text/vtt",
+    ".srt": "text/plain",
 }
 
 
@@ -85,11 +87,16 @@ class RangeHTTPRequestHandler(BaseHTTPRequestHandler):
 
             if range_header and range_header.startswith("bytes="):
                 range_str = range_header[6:].strip()
-                parts = range_str.split("-")
-                if parts[0]:
-                    start = int(parts[0])
-                if len(parts) > 1 and parts[1]:
-                    end = int(parts[1])
+                if range_str.startswith("-"):
+                    suffix_len = int(range_str[1:])
+                    start = max(0, total_size - suffix_len)
+                    end = total_size - 1
+                else:
+                    parts = range_str.split("-")
+                    if parts[0]:
+                        start = int(parts[0])
+                    if len(parts) > 1 and parts[1]:
+                        end = int(parts[1])
 
                 if start >= total_size or end >= total_size or start > end:
                     self.send_response(416)
@@ -117,7 +124,7 @@ class RangeHTTPRequestHandler(BaseHTTPRequestHandler):
             if not send_body:
                 return
 
-            chunk_size = 64 * 1024
+            chunk_size = 512 * 1024  # 512 KB por bloco para streaming fluido e sem engasgos em 1080p
             bytes_left = length
             with open(file_path, "rb") as f:
                 f.seek(start)
@@ -406,12 +413,31 @@ class TVCastManager(QObject):
                     except Exception as app_err:
                         logger.debug(f"Aviso ao iniciar APP_MEDIA_RECEIVER: {app_err}")
 
+                # Detecta legendas correspondentes (.vtt ou .srt)
+                base_no_ext, _ = os.path.splitext(file_path)
+                sub_url = None
+                if os.path.exists(base_no_ext + ".vtt"):
+                    sub_url = self.stream_server.register_file(base_no_ext + ".vtt")
+                elif os.path.exists(base_no_ext + ".srt"):
+                    try:
+                        vtt_file = base_no_ext + ".vtt"
+                        with open(base_no_ext + ".srt", "r", encoding="utf-8", errors="replace") as sf:
+                            stext = sf.read()
+                        import re
+                        with open(vtt_file, "w", encoding="utf-8") as vf:
+                            vf.write("WEBVTT\n\n" + re.sub(r"(\d{2}:\d{2}:\d{2}),(\d{3})", r"\1.\2", stext))
+                        sub_url = self.stream_server.register_file(vtt_file)
+                    except Exception as sub_err:
+                        logger.debug(f"Aviso ao converter legenda: {sub_err}")
+
                 mc = cast_device.media_controller
                 mc.play_media(
                     media_url,
                     content_type=mime,
                     title=file_name,
-                    stream_type="BUFFERED"
+                    stream_type="BUFFERED",
+                    subtitles=sub_url,
+                    subtitles_lang="pt-BR"
                 )
                 mc.block_until_active(timeout=8.0)
 
@@ -435,6 +461,10 @@ class TVCastManager(QObject):
                 try:
                     if self.active_chromecast and self.active_chromecast.media_controller:
                         mc = self.active_chromecast.media_controller
+                        try:
+                            mc.update_status()
+                        except Exception:
+                            pass
                         status = mc.status
                         if status:
                             state = status.player_state or "IDLE"
