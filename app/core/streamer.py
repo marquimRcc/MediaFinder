@@ -30,9 +30,36 @@ EXTRA_MIME_TYPES = {
     ".ogg": "audio/ogg",
     ".flac": "audio/flac",
     ".wav": "audio/wav",
-    ".vtt": "text/vtt",
-    ".srt": "text/plain",
+    ".vtt": "text/vtt; charset=utf-8",
+    ".srt": "text/plain; charset=utf-8",
 }
+
+
+def convert_srt_to_vtt(srt_path: str, vtt_path: str) -> bool:
+    """Converte legenda .srt para formato WebVTT com detecção automática de encoding (UTF-8, Windows-1252, ISO-8859-1)."""
+    try:
+        with open(srt_path, "rb") as f:
+            raw = f.read()
+
+        text = None
+        for enc in ("utf-8", "windows-1252", "iso-8859-1", "cp1252", "latin-1"):
+            try:
+                text = raw.decode(enc)
+                break
+            except UnicodeDecodeError:
+                continue
+
+        if text is None:
+            text = raw.decode("utf-8", errors="replace")
+
+        import re
+        vtt_content = "WEBVTT\n\n" + re.sub(r"(\d{2}:\d{2}:\d{2}),(\d{3})", r"\1.\2", text)
+        with open(vtt_path, "w", encoding="utf-8") as f:
+            f.write(vtt_content)
+        return True
+    except Exception as e:
+        logger.debug(f"Erro ao converter legenda para VTT: {e}")
+        return False
 
 
 def get_local_ip() -> str:
@@ -413,22 +440,17 @@ class TVCastManager(QObject):
                     except Exception as app_err:
                         logger.debug(f"Aviso ao iniciar APP_MEDIA_RECEIVER: {app_err}")
 
-                # Detecta legendas correspondentes (.vtt ou .srt)
+                # Detecta legendas correspondentes (.srt ou .vtt)
                 base_no_ext, _ = os.path.splitext(file_path)
                 sub_url = None
-                if os.path.exists(base_no_ext + ".vtt"):
-                    sub_url = self.stream_server.register_file(base_no_ext + ".vtt")
-                elif os.path.exists(base_no_ext + ".srt"):
-                    try:
-                        vtt_file = base_no_ext + ".vtt"
-                        with open(base_no_ext + ".srt", "r", encoding="utf-8", errors="replace") as sf:
-                            stext = sf.read()
-                        import re
-                        with open(vtt_file, "w", encoding="utf-8") as vf:
-                            vf.write("WEBVTT\n\n" + re.sub(r"(\d{2}:\d{2}:\d{2}),(\d{3})", r"\1.\2", stext))
-                        sub_url = self.stream_server.register_file(vtt_file)
-                    except Exception as sub_err:
-                        logger.debug(f"Aviso ao converter legenda: {sub_err}")
+                srt_candidate = base_no_ext + ".srt"
+                vtt_candidate = base_no_ext + ".vtt"
+
+                if os.path.exists(srt_candidate):
+                    if convert_srt_to_vtt(srt_candidate, vtt_candidate):
+                        sub_url = self.stream_server.register_file(vtt_candidate)
+                elif os.path.exists(vtt_candidate):
+                    sub_url = self.stream_server.register_file(vtt_candidate)
 
                 mc = cast_device.media_controller
                 mc.play_media(
