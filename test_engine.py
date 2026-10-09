@@ -278,12 +278,20 @@ def run_tests():
 
             stream_server.stop()
 
-            # 4.9 TVCastManager e CastDialog
+            # 4.9 TVCastManager, CastDialog e RemoteAccessDialog
             cast_mgr = TVCastManager.get_instance()
             assert cast_mgr is not None
             cast_dialog = CastDialog(sample_file)
             assert cast_dialog is not None
             assert cast_dialog.list_devices is not None
+
+            from app.ui.remote_dialog import RemoteAccessDialog
+            rem_dialog = RemoteAccessDialog()
+            assert rem_dialog is not None
+            assert rem_dialog.url.startswith("http://")
+            assert rem_dialog.lbl_qr is not None
+            rem_dialog._copy_url()
+            assert rem_dialog.btn_copy.text() == "✓ Copiado!"
 
             # 4.10 Testes de Segurança (Validação de Executáveis e Revogação de Tokens)
             from app.utils.system_ops import is_dangerous_file
@@ -302,6 +310,102 @@ def run_tests():
             stream_server.clear_tokens()
             assert stream_server.get_file_path(token_key) is None
             stream_server.stop()
+
+            # 4.11 Validação do Acesso Remoto Mobile (PWA, Perfis, Kids, Continuar Assistindo e REST API)
+            import json
+            web_server = MediaStreamServer(port=0, db=ui_db)
+            w_port = web_server.start()
+            base_url = f"http://{web_server.host_ip}:{w_port}"
+
+            # Teste GET / (HTML do PWA)
+            with urllib.request.urlopen(f"{base_url}/") as resp:
+                assert resp.status == 200
+                html = resp.read().decode("utf-8")
+                assert "MediaFinder Mobile" in html
+                assert "view-profiles" in html
+                assert "view-kids" in html
+
+            # Teste GET /manifest.json
+            with urllib.request.urlopen(f"{base_url}/manifest.json") as resp:
+                assert resp.status == 200
+                assert "application/json" in resp.headers.get("Content-Type", "")
+
+            # Teste GET /sw.js
+            with urllib.request.urlopen(f"{base_url}/sw.js") as resp:
+                assert resp.status == 200
+
+            # Teste GET /static/styles.css
+            with urllib.request.urlopen(f"{base_url}/static/styles.css") as resp:
+                assert resp.status == 200
+                assert "--bg-primary" in resp.read().decode("utf-8")
+
+            # Teste de Segurança contra Path Traversal
+            try:
+                urllib.request.urlopen(f"{base_url}/static/../../../../etc/passwd")
+                assert False, "Deveria ter bloqueado path traversal"
+            except urllib.error.HTTPError as e:
+                assert e.code == 404
+
+            # Teste GET /api/profiles
+            with urllib.request.urlopen(f"{base_url}/api/profiles") as resp:
+                assert resp.status == 200
+                profiles = json.loads(resp.read().decode("utf-8"))
+                assert len(profiles) >= 3
+                assert any(p["id"] == "marcos" for p in profiles)
+                assert any(p["id"] == "kids" and p["is_kids"] == 1 for p in profiles)
+
+            # Teste POST /api/profiles/set-pin e /api/profiles/verify-pin
+            post_pin_req = urllib.request.Request(
+                f"{base_url}/api/profiles/set-pin",
+                data=json.dumps({"profile_id": "marcos", "pin": "1234"}).encode("utf-8"),
+                headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(post_pin_req) as resp:
+                assert json.loads(resp.read().decode("utf-8"))["success"] is True
+
+            verify_ok = urllib.request.Request(
+                f"{base_url}/api/profiles/verify-pin",
+                data=json.dumps({"profile_id": "marcos", "pin": "1234"}).encode("utf-8"),
+                headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(verify_ok) as resp:
+                assert json.loads(resp.read().decode("utf-8"))["success"] is True
+
+            verify_err = urllib.request.Request(
+                f"{base_url}/api/profiles/verify-pin",
+                data=json.dumps({"profile_id": "marcos", "pin": "9999"}).encode("utf-8"),
+                headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(verify_err) as resp:
+                assert json.loads(resp.read().decode("utf-8"))["success"] is False
+
+            # Teste de Continuar Assistindo (Progresso)
+            video_test = ui_db.get_random_file(categories=["video"])
+            assert video_test is not None
+            v_id = video_test["id"]
+
+            post_prog = urllib.request.Request(
+                f"{base_url}/api/playback/progress",
+                data=json.dumps({"profile_id": "marcos", "file_id": v_id, "position": 600.0, "duration": 1800.0}).encode("utf-8"),
+                headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(post_prog) as resp:
+                assert json.loads(resp.read().decode("utf-8"))["success"] is True
+
+            # GET /api/continue
+            with urllib.request.urlopen(f"{base_url}/api/continue?profile=marcos") as resp:
+                cont_items = json.loads(resp.read().decode("utf-8"))
+                assert len(cont_items) >= 1
+                assert cont_items[0]["id"] == v_id
+                assert cont_items[0]["progress_percent"] == 33.3
+
+            # GET /api/cast/status
+            with urllib.request.urlopen(f"{base_url}/api/cast/status") as resp:
+                cast_st = json.loads(resp.read().decode("utf-8"))
+                assert "is_casting" in cast_st
+                assert "state" in cast_st
+
+            web_server.stop()
 
         print("✓ Todos os componentes, streaming HTTP 206, diálogos, segurança e IndexWorker validados com sucesso!")
     finally:

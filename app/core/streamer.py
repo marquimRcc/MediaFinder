@@ -74,31 +74,305 @@ def get_local_ip() -> str:
         return "127.0.0.1"
 
 
+WEB_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web")
+
+
 class RangeHTTPRequestHandler(BaseHTTPRequestHandler):
     """
     Handler HTTP com suporte a Range Requests (Status 206 Partial Content),
-    cabeçalhos CORS e HEAD requests, indispensável para Smart TVs e Chromecast.
+    cabeçalhos CORS, rotas de API REST e arquivos estáticos para o PWA Mobile.
     """
 
     def log_message(self, format, *args):
         pass
 
     def do_HEAD(self):
-        self._process_request(send_body=False)
+        self._dispatch_request(send_body=False)
 
     def do_GET(self):
-        self._process_request(send_body=True)
+        self._dispatch_request(send_body=True)
+
+    def do_POST(self):
+        self._handle_post_api()
 
     def do_OPTIONS(self):
-        """Responde a requisições pre-flight CORS enviadas por players de Smart TVs e navegadores."""
+        """Responde a requisições pre-flight CORS enviadas por navegadores e Smart TVs."""
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Headers", "Range, Content-Type, Accept, Origin")
-        self.send_header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Range, Content-Type, Accept, Origin, Authorization")
+        self.send_header("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS")
         self.send_header("Access-Control-Max-Age", "86400")
         self.end_headers()
 
-    def _process_request(self, send_body: bool = True):
+    def _dispatch_request(self, send_body: bool = True):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+
+        # 1. Rotas da API REST
+        if path.startswith("/api/"):
+            self._handle_get_api(path, parsed.query, send_body)
+            return
+
+        # 2. Transmissão de vídeo via token existente
+        if path.startswith("/stream/"):
+            self._process_media_stream(send_body)
+            return
+
+        # 3. Arquivos da aplicação Web / PWA Mobile
+        self._serve_static_file(path, send_body)
+
+    def _send_json_response(self, data: Any, status: int = 200, send_body: bool = True):
+        import json
+        payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Headers", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.end_headers()
+        if send_body:
+            try:
+                self.wfile.write(payload)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+
+    def _serve_static_file(self, req_path: str, send_body: bool):
+        clean_path = req_path.split("?")[0].strip()
+        if clean_path in ("", "/", "/index.html", "/mobile"):
+            target_file = os.path.join(WEB_DIR, "index.html")
+        elif clean_path == "/manifest.json":
+            target_file = os.path.join(WEB_DIR, "manifest.json")
+        elif clean_path == "/sw.js":
+            target_file = os.path.join(WEB_DIR, "sw.js")
+        elif clean_path.startswith("/static/"):
+            rel = clean_path[len("/static/"):].lstrip("/")
+            target_file = os.path.normpath(os.path.join(WEB_DIR, rel))
+        else:
+            rel = clean_path.lstrip("/")
+            target_file = os.path.normpath(os.path.join(WEB_DIR, rel))
+
+        # Proteção contra Path Traversal
+        if not target_file.startswith(WEB_DIR) or not os.path.isfile(target_file):
+            self.send_error(404, "Arquivo não encontrado")
+            return
+
+        _, ext = os.path.splitext(target_file)
+        mime = {
+            ".html": "text/html; charset=utf-8",
+            ".css": "text/css; charset=utf-8",
+            ".js": "application/javascript; charset=utf-8",
+            ".json": "application/json; charset=utf-8",
+            ".svg": "image/svg+xml",
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".ico": "image/x-icon",
+        }.get(ext.lower(), "application/octet-stream")
+
+        try:
+            total_size = os.path.getsize(target_file)
+            self.send_response(200)
+            self.send_header("Content-Type", mime)
+            self.send_header("Content-Length", str(total_size))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+
+            if send_body:
+                with open(target_file, "rb") as f:
+                    self.wfile.write(f.read())
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        except Exception as e:
+            logger.debug(f"Erro ao servir arquivo estático: {e}")
+
+    def _handle_get_api(self, path: str, query_str: str, send_body: bool):
+        media_server = getattr(self.server, "media_server", None)
+        if not media_server or not media_server.db:
+            self._send_json_response({"error": "Banco não inicializado"}, 500, send_body)
+            return
+
+        db = media_server.db
+        query_params = urllib.parse.parse_qs(query_str)
+
+        # GET /api/profiles
+        if path == "/api/profiles":
+            profiles = db.get_profiles()
+            self._send_json_response(profiles, 200, send_body)
+            return
+
+        # GET /api/continue?profile=<id>
+        if path == "/api/continue":
+            profile_id = query_params.get("profile", ["marcos"])[0]
+            items = db.get_continue_watching(profile_id, limit=10)
+            self._send_json_response(items, 200, send_body)
+            return
+
+        # GET /api/catalog?profile=<id>&category=<cat>&query=<q>&is_kids=<0|1>&limit=<n>&offset=<o>
+        if path == "/api/catalog":
+            profile_id = query_params.get("profile", [""])[0]
+            is_kids_param = query_params.get("is_kids", ["0"])[0]
+            is_kids = (is_kids_param == "1") or (profile_id == "kids")
+            cat = query_params.get("category", [None])[0]
+            query = query_params.get("query", [None])[0]
+            limit = int(query_params.get("limit", [50])[0])
+            offset = int(query_params.get("offset", [0])[0])
+
+            items, total = db.get_mobile_catalog(is_kids=is_kids, category=cat, query=query, limit=limit, offset=offset)
+            self._send_json_response({"items": items, "total": total}, 200, send_body)
+            return
+
+        # GET /api/media/<file_id>/stream
+        import re
+        m_stream = re.match(r"^/api/media/(\d+)/stream$", path)
+        if m_stream:
+            file_id = int(m_stream.group(1))
+            with db._get_connection() as conn:
+                row = conn.execute("SELECT path FROM files WHERE id = ?;", (file_id,)).fetchone()
+            if not row or not os.path.isfile(row["path"]):
+                self._send_json_response({"error": "Arquivo não encontrado"}, 404, send_body)
+                return
+            stream_url = media_server.register_file(row["path"])
+            self.send_response(302)
+            self.send_header("Location", stream_url)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            return
+
+        # GET /api/cast/devices
+        if path == "/api/cast/devices":
+            cast_mgr = TVCastManager.get_instance()
+            cast_mgr.start_discovery()
+            devices_list = []
+            for d in cast_mgr.discovered_devices.values():
+                devices_list.append({
+                    "id": d.device_id,
+                    "name": d.name,
+                    "model": d.model,
+                    "type": d.device_type,
+                    "host": d.host
+                })
+            self._send_json_response(devices_list, 200, send_body)
+            return
+
+        # GET /api/cast/status
+        if path == "/api/cast/status":
+            cast_mgr = TVCastManager.get_instance()
+            self._send_json_response({
+                "is_casting": bool(cast_mgr.is_casting),
+                "device": cast_mgr.active_cast_device.name if cast_mgr.active_cast_device else None,
+                "file_name": os.path.basename(cast_mgr._current_file_path) if cast_mgr._current_file_path else None,
+                "state": getattr(cast_mgr, "last_state", "IDLE"),
+                "current_time": getattr(cast_mgr, "last_position", 0.0),
+                "duration": getattr(cast_mgr, "last_duration", 0.0),
+                "volume": getattr(cast_mgr, "last_volume", 1.0),
+                "is_muted": getattr(cast_mgr, "last_muted", False)
+            }, 200, send_body)
+            return
+
+        self._send_json_response({"error": "Endpoint não encontrado"}, 404, send_body)
+
+    def _handle_post_api(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path.rstrip("/")
+
+        media_server = getattr(self.server, "media_server", None)
+        if not media_server or not media_server.db:
+            self._send_json_response({"error": "Servidor não inicializado"}, 500)
+            return
+
+        import json
+        content_length = int(self.headers.get("Content-Length", 0))
+        body = {}
+        if content_length > 0:
+            try:
+                body = json.loads(self.rfile.read(content_length).decode("utf-8"))
+            except Exception:
+                self._send_json_response({"error": "JSON inválido"}, 400)
+                return
+
+        db = media_server.db
+        cast_mgr = TVCastManager.get_instance()
+
+        # POST /api/profiles/verify-pin
+        if path == "/api/profiles/verify-pin":
+            profile_id = body.get("profile_id", "")
+            pin = body.get("pin", "")
+            ok = db.verify_profile_pin(profile_id, pin)
+            self._send_json_response({"success": ok})
+            return
+
+        # POST /api/profiles/set-pin
+        if path == "/api/profiles/set-pin":
+            profile_id = body.get("profile_id", "")
+            pin = body.get("pin", "")
+            ok = db.set_profile_pin(profile_id, pin)
+            self._send_json_response({"success": ok})
+            return
+
+        # POST /api/playback/progress
+        if path == "/api/playback/progress":
+            profile_id = body.get("profile_id", "marcos")
+            file_id = int(body.get("file_id", 0))
+            pos = float(body.get("position", 0.0))
+            dur = float(body.get("duration", 0.0))
+            if file_id > 0:
+                db.save_playback_progress(profile_id, file_id, pos, dur)
+            self._send_json_response({"success": True})
+            return
+
+        # POST /api/cast/play
+        if path == "/api/cast/play":
+            device_id = body.get("device_id")
+            file_id = int(body.get("file_id", 0))
+            profile_id = body.get("profile_id", "marcos")
+
+            device = cast_mgr.discovered_devices.get(device_id)
+            if not device:
+                for d in cast_mgr.discovered_devices.values():
+                    if d.host == device_id:
+                        device = d
+                        break
+
+            if not device:
+                self._send_json_response({"success": False, "error": "Dispositivo TV não encontrado"}, 404)
+                return
+
+            with db._get_connection() as conn:
+                row = conn.execute("SELECT path FROM files WHERE id = ?;", (file_id,)).fetchone()
+            if not row or not os.path.isfile(row["path"]):
+                self._send_json_response({"success": False, "error": "Arquivo não encontrado"}, 404)
+                return
+
+            cast_mgr.active_profile_id = profile_id
+            cast_mgr._current_file_id = file_id
+            cast_mgr.cast_media(device, row["path"])
+            self._send_json_response({"success": True, "device": device.name})
+            return
+
+        # POST /api/cast/control
+        if path == "/api/cast/control":
+            action = body.get("action", "")
+            val = body.get("value")
+
+            if action == "play":
+                cast_mgr.play()
+            elif action == "pause":
+                cast_mgr.pause()
+            elif action == "seek" and val is not None:
+                cast_mgr.seek(float(val))
+            elif action == "volume" and val is not None:
+                cast_mgr.set_volume(float(val))
+            elif action == "stop":
+                cast_mgr.stop_cast()
+
+            self._send_json_response({"success": True, "action": action})
+            return
+
+        self._send_json_response({"error": "Endpoint não encontrado"}, 404)
+
+    def _process_media_stream(self, send_body: bool = True):
         media_server = getattr(self.server, "media_server", None)
         if not media_server:
             self.send_error(500, "Servidor de mídia não configurado")
@@ -195,15 +469,22 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 class MediaStreamServer:
     """Servidor HTTP embutido para disponibilizar mídias na rede local para as TVs."""
 
-    def __init__(self, port: int = 1745):
+    def __init__(self, port: int = 1745, db: Optional[Any] = None):
         self.desired_port = port
         self.host_ip = get_local_ip()
+        self.db = db
         self.httpd: Optional[ThreadedHTTPServer] = None
         self.server_thread: Optional[threading.Thread] = None
         self.active_tokens: Dict[str, str] = {}
         self._path_to_token: Dict[str, str] = {}
         self.actual_port: int = port
         self._lock = threading.Lock()
+        if self.db is None:
+            try:
+                from app.core.database import MediaDatabase
+                self.db = MediaDatabase()
+            except Exception:
+                self.db = None
 
     def start(self) -> int:
         if self.httpd is not None:
@@ -290,18 +571,35 @@ class TVCastManager(QObject):
     _instance: Optional["TVCastManager"] = None
 
     @classmethod
-    def get_instance(cls) -> "TVCastManager":
+    def get_instance(cls, db: Optional[Any] = None) -> "TVCastManager":
         if cls._instance is None:
-            cls._instance = TVCastManager()
+            cls._instance = TVCastManager(db=db)
+        elif db is not None and getattr(cls._instance, 'db', None) is None:
+            cls._instance.db = db
+            cls._instance.stream_server.db = db
         return cls._instance
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, db: Optional[Any] = None):
         super().__init__(parent)
-        self.stream_server = MediaStreamServer()
+        self.db = db
+        if self.db is None:
+            try:
+                from app.core.database import MediaDatabase
+                self.db = MediaDatabase()
+            except Exception:
+                self.db = None
+        self.stream_server = MediaStreamServer(db=self.db)
         self.discovered_devices: Dict[str, TVDevice] = {}
         self.active_cast_device: Optional[TVDevice] = None
         self.active_chromecast = None
         self.is_casting: bool = False
+        self.last_state: str = "IDLE"
+        self.last_position: float = 0.0
+        self.last_duration: float = 0.0
+        self.last_volume: float = 1.0
+        self.last_muted: bool = False
+        self.active_profile_id: Optional[str] = None
+        self._current_file_id: Optional[int] = None
         self._current_media_url: Optional[str] = None
         self._current_file_path: Optional[str] = None
         self._browser = None
@@ -552,11 +850,22 @@ class TVCastManager(QObject):
                             state = status.player_state or "IDLE"
                             curr = float(status.current_time or 0.0)
                             dur = float(status.duration or 0.0)
+                            self.last_state = state
+                            self.last_position = curr
+                            self.last_duration = dur
                             self.status_updated.emit(state, curr, dur)
+
+                            # Sincroniza progresso com o banco se houver perfil ativo
+                            if curr > 0 and self.active_profile_id and self._current_file_id and self.db:
+                                try:
+                                    self.db.save_playback_progress(self.active_profile_id, self._current_file_id, curr, dur)
+                                except Exception:
+                                    pass
 
                             # Encerramento natural do vídeo quando termina
                             if state == "IDLE" and curr > 0 and (dur > 0 and curr >= dur - 3.0):
                                 self.is_casting = False
+                                self.last_state = "IDLE"
                                 self.stream_server.clear_tokens()
                                 self.cast_stopped.emit()
                                 break
@@ -565,6 +874,8 @@ class TVCastManager(QObject):
                         if cast_status:
                             vol = float(cast_status.volume_level or 1.0)
                             muted = bool(cast_status.volume_muted)
+                            self.last_volume = vol
+                            self.last_muted = muted
                             self.volume_updated.emit(vol, muted)
 
                 except Exception:
@@ -575,6 +886,7 @@ class TVCastManager(QObject):
         t.start()
 
     def play(self):
+        self.last_state = "PLAYING"
         if self.active_chromecast and self.active_chromecast.media_controller:
             try:
                 self.active_chromecast.media_controller.play()
@@ -582,6 +894,7 @@ class TVCastManager(QObject):
                 logger.debug(f"Erro ao reproduzir: {e}")
 
     def pause(self):
+        self.last_state = "PAUSED"
         if self.active_chromecast and self.active_chromecast.media_controller:
             try:
                 self.active_chromecast.media_controller.pause()
@@ -596,10 +909,12 @@ class TVCastManager(QObject):
             except Exception:
                 pass
         self.is_casting = False
+        self.last_state = "IDLE"
         self.stream_server.clear_tokens()
         self.cast_stopped.emit()
 
     def seek(self, position_seconds: float):
+        self.last_position = position_seconds
         if self.active_chromecast and self.active_chromecast.media_controller:
             try:
                 self.active_chromecast.media_controller.seek(position_seconds)
@@ -607,9 +922,10 @@ class TVCastManager(QObject):
                 logger.debug(f"Erro ao avançar: {e}")
 
     def set_volume(self, level: float):
+        self.last_volume = max(0.0, min(1.0, level))
         if self.active_chromecast:
             try:
-                self.active_chromecast.set_volume(max(0.0, min(1.0, level)))
+                self.active_chromecast.set_volume(self.last_volume)
             except Exception as e:
                 logger.debug(f"Erro ao mudar volume: {e}")
 
@@ -617,6 +933,7 @@ class TVCastManager(QObject):
         if self.active_chromecast and self.active_chromecast.status:
             try:
                 curr = bool(self.active_chromecast.status.volume_muted)
+                self.last_muted = not curr
                 self.active_chromecast.set_volume_muted(not curr)
             except Exception as e:
                 logger.debug(f"Erro ao mutar: {e}")

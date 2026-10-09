@@ -106,6 +106,12 @@ class MainWindow(QMainWindow):
         self.btn_settings.clicked.connect(self._open_settings)
         header_layout.addWidget(self.btn_settings)
 
+        self.btn_remote = QPushButton("📱 Celular")
+        self.btn_remote.setObjectName("remote_access_btn")
+        self.btn_remote.setToolTip("Acesso remoto no celular/tablet via Wi-Fi (PWA, Perfis e Controle Remoto)")
+        self.btn_remote.clicked.connect(self._open_remote_access)
+        header_layout.addWidget(self.btn_remote)
+
         self.btn_about = QPushButton("ℹ️ Sobre")
         self.btn_about.setToolTip("Informações sobre o MediaFinder, autor e licença")
         self.btn_about.clicked.connect(self._open_about)
@@ -518,6 +524,11 @@ class MainWindow(QMainWindow):
 
     def _open_about(self):
         dialog = SettingsDialog(self.config, self.db, default_tab=2, parent=self)
+        dialog.exec()
+
+    def _open_remote_access(self):
+        from app.ui.remote_dialog import RemoteAccessDialog
+        dialog = RemoteAccessDialog(self)
         dialog.exec()
 
 

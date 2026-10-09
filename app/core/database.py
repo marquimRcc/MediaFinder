@@ -108,6 +108,45 @@ class MediaDatabase:
             except Exception as e:
                 print(f"Nota: FTS5 não pôde ser inicializado ({e}), fallback para LIKE.")
 
+            # Tabela de perfis de usuário (Acesso Mobile / PWA)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS user_profiles (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    avatar TEXT NOT NULL,
+                    is_kids INTEGER NOT NULL DEFAULT 0,
+                    pin_hash TEXT
+                );
+            """)
+
+            # Tabela de progresso de reprodução por perfil (Continuar de onde parou)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS playback_progress (
+                    profile_id TEXT NOT NULL,
+                    file_id INTEGER NOT NULL,
+                    position_seconds REAL NOT NULL DEFAULT 0.0,
+                    duration_seconds REAL NOT NULL DEFAULT 0.0,
+                    updated_at REAL NOT NULL DEFAULT 0.0,
+                    PRIMARY KEY (profile_id, file_id),
+                    FOREIGN KEY (profile_id) REFERENCES user_profiles(id) ON DELETE CASCADE,
+                    FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
+                );
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_progress_updated ON playback_progress(updated_at DESC);")
+
+            # Seed inicial de perfis se a tabela estiver vazia
+            cursor.execute("SELECT COUNT(*) FROM user_profiles;")
+            if cursor.fetchone()[0] == 0:
+                default_profiles = [
+                    ("marcos", "Marcos", "admin", 0, None),
+                    ("esposa", "Esposa", "flower", 0, None),
+                    ("kids", "Kids", "lion", 1, None),
+                ]
+                cursor.executemany(
+                    "INSERT INTO user_profiles (id, name, avatar, is_kids, pin_hash) VALUES (?, ?, ?, ?, ?);",
+                    default_profiles
+                )
+
             conn.commit()
 
         if sys.platform != "win32" and os.path.exists(self.db_path):
@@ -447,3 +486,149 @@ class MediaDatabase:
             except Exception:
                 pass
             conn.commit()
+
+    def get_profiles(self) -> List[Dict[str, Any]]:
+        """Retorna todos os perfis cadastrados com indicador se possuem PIN ativo."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, name, avatar, is_kids, (pin_hash IS NOT NULL AND pin_hash != '') as has_pin
+                FROM user_profiles
+                ORDER BY is_kids ASC, name ASC;
+            """)
+            return [dict(r) for r in cursor.fetchall()]
+
+    def get_profile(self, profile_id: str) -> Optional[Dict[str, Any]]:
+        """Retorna os dados públicos de um perfil específico."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, name, avatar, is_kids, (pin_hash IS NOT NULL AND pin_hash != '') as has_pin
+                FROM user_profiles
+                WHERE id = ?;
+            """, (profile_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def verify_profile_pin(self, profile_id: str, pin: str) -> bool:
+        """Verifica se o PIN de 4 dígitos informado é válido para o perfil."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT pin_hash FROM user_profiles WHERE id = ?;", (profile_id,))
+            row = cursor.fetchone()
+            if not row or not row["pin_hash"]:
+                return True  # Sem PIN configurado, liberado
+            import hashlib
+            computed = hashlib.sha256(str(pin).strip().encode("utf-8")).hexdigest()
+            return row["pin_hash"] == computed
+
+    def set_profile_pin(self, profile_id: str, pin: Optional[str]) -> bool:
+        """Define ou limpa o PIN de segurança do perfil."""
+        import hashlib
+        pin_hash = hashlib.sha256(str(pin).strip().encode("utf-8")).hexdigest() if pin and str(pin).strip() else None
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE user_profiles SET pin_hash = ? WHERE id = ?;", (pin_hash, profile_id))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def save_playback_progress(self, profile_id: str, file_id: int, position_seconds: float, duration_seconds: float) -> None:
+        """Registra a posição atual de reprodução no perfil."""
+        import time
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO playback_progress (profile_id, file_id, position_seconds, duration_seconds, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(profile_id, file_id) DO UPDATE SET
+                    position_seconds = excluded.position_seconds,
+                    duration_seconds = excluded.duration_seconds,
+                    updated_at = excluded.updated_at;
+            """, (profile_id, file_id, max(0.0, float(position_seconds)), max(0.0, float(duration_seconds)), time.time()))
+            conn.commit()
+
+    def get_playback_progress(self, profile_id: str, file_id: int) -> Optional[Dict[str, Any]]:
+        """Retorna a posição e duração salvas para um arquivo e perfil."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT position_seconds, duration_seconds, updated_at
+                FROM playback_progress
+                WHERE profile_id = ? AND file_id = ?;
+            """, (profile_id, file_id))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def get_continue_watching(self, profile_id: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Retorna mídias pausadas entre 10s e 95% do total para 'Continuar Assistindo'."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT 
+                    f.id, f.name, f.path, f.category, f.size, f.extension,
+                    p.position_seconds, p.duration_seconds, p.updated_at,
+                    ROUND((p.position_seconds / MAX(p.duration_seconds, 1.0)) * 100, 1) as progress_percent
+                FROM playback_progress p
+                JOIN files f ON f.id = p.file_id
+                WHERE p.profile_id = ?
+                  AND p.position_seconds >= 10.0
+                  AND (p.duration_seconds <= 0 OR p.position_seconds < (p.duration_seconds * 0.95))
+                ORDER BY p.updated_at DESC
+                LIMIT ?;
+            """, (profile_id, limit))
+            return [dict(r) for r in cursor.fetchall()]
+
+    def get_mobile_catalog(
+        self,
+        is_kids: bool = False,
+        category: Optional[str] = None,
+        query: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """Busca catálogo paginado para web/mobile com isolamento para Perfil Kids."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            where_clauses = []
+            params: List[Any] = []
+
+            # Perfil Kids: filtra exclusivamente por padrões infantis
+            if is_kids:
+                kids_keywords = [
+                    "%desenho%", "%kids%", "%infantil%", "%animacao%", "%animation%",
+                    "%anime%", "%disney%", "%pixar%", "%cartoon%", "%barbie%", "%lego%"
+                ]
+                kids_conditions = " OR ".join(["(f.path LIKE ? OR f.name LIKE ?)" for _ in kids_keywords])
+                kids_params = []
+                for kw in kids_keywords:
+                    kids_params.extend([kw, kw])
+                where_clauses.append(f"({kids_conditions})")
+                params.extend(kids_params)
+
+            if category and category.lower() != "all":
+                where_clauses.append("f.category = ?")
+                params.append(category.lower())
+
+            if query and query.strip():
+                terms = query.strip().split()
+                for term in terms:
+                    where_clauses.append("(f.name LIKE ? OR f.path LIKE ?)")
+                    params.extend([f"%{term}%", f"%{term}%"])
+
+            where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+            count_query = f"SELECT COUNT(*) as total FROM files f {where_sql};"
+            cursor.execute(count_query, params)
+            total = cursor.fetchone()["total"]
+
+            data_query = f"""
+                SELECT f.id, f.name, f.path, f.parent_dir, f.extension, f.category, f.size, f.mtime, f.drive
+                FROM files f
+                {where_sql}
+                ORDER BY f.mtime DESC, f.name ASC
+                LIMIT ? OFFSET ?;
+            """
+            cursor.execute(data_query, params + [limit, offset])
+            rows = [dict(r) for r in cursor.fetchall()]
+            return rows, total
+

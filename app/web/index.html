@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#070a13">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="MediaFinder">
+  <title>MediaFinder Mobile</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+  <!-- TOPO / CABEÇALHO -->
+  <header class="top-nav" id="top-nav">
+    <div class="brand">
+      <img src="/static/icon.svg" alt="MediaFinder" class="brand-icon">
+      <span class="brand-name">MediaFinder</span>
+    </div>
+    <div class="nav-actions">
+      <!-- Botão de Cast (Abre seleção de TV ou Controle Remoto se já transmitindo) -->
+      <button class="btn-icon" id="btn-cast-toggle" title="Transmitir na TV">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 16.1A5 5 0 0 1 5.9 20M2 12.05A9 9 0 0 1 9.95 20M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"></path>
+          <line x1="2" y1="20" x2="2.01" y2="20"></line>
+        </svg>
+      </button>
+
+      <!-- Chip do Perfil Atual (Troca de perfil) -->
+      <div class="profile-chip" id="btn-profile-chip" title="Trocar de Perfil">
+        <span class="profile-avatar-sm" id="nav-avatar">👑</span>
+        <span id="nav-profile-name">Marcos</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- =========================================================================
+       1. TELA: SELEÇÃO DE PERFIS
+       ========================================================================= -->
+  <main class="view-screen active" id="view-profiles">
+    <h1 class="profiles-title">Quem está assistindo?</h1>
+    <p class="profiles-subtitle">Escolha seu perfil para continuar de onde parou</p>
+
+    <div class="profiles-grid" id="profiles-container">
+      <!-- Inserido dinamicamente via JS -->
+    </div>
+  </main>
+
+  <!-- =========================================================================
+       2. TELA: HOME PRINCIPAL (ADULTO / GERAL)
+       ========================================================================= -->
+  <main class="view-screen" id="view-home">
+    <!-- Busca e Filtros -->
+    <div class="search-container">
+      <div class="search-input-wrapper">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="search-input" class="search-input" placeholder="Buscar filmes, séries, animes..." autocomplete="off">
+      </div>
+      <div class="filter-pills" id="filter-pills">
+        <button class="pill active" data-category="all">Todos</button>
+        <button class="pill" data-category="video">Vídeos & Filmes</button>
+        <button class="pill" data-category="audio">Músicas</button>
+      </div>
+    </div>
+
+    <!-- Hero Card: Continuar Assistindo -->
+    <section class="hero-card" id="hero-continue" style="display: none;">
+      <div class="hero-backdrop" id="hero-backdrop">
+        <span class="hero-badge">Continuar Assistindo</span>
+      </div>
+      <div class="hero-info">
+        <h2 class="hero-title" id="hero-title">Título do Filme</h2>
+        <div class="hero-meta">
+          <span id="hero-time-text">Pausado em 35%</span>
+          <span id="hero-duration-text">Restam 45 min</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="hero-progress-bar" style="width: 35%;"></div>
+        </div>
+        <div class="hero-actions">
+          <button class="btn-primary" id="btn-hero-play-local">
+            <span>▶</span> Assistir no Celular
+          </button>
+          <button class="btn-secondary" id="btn-hero-cast">
+            <span>📺</span> Transmitir TV
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Carrossel: Filmes Recentes -->
+    <section>
+      <div class="section-title">
+        <span>Filmes e Vídeos Recentes</span>
+      </div>
+      <div class="carousel-row" id="carousel-recent">
+        <!-- Inserido dinamicamente -->
+      </div>
+    </section>
+
+    <!-- Seção: Catálogo Completo -->
+    <section>
+      <div class="section-title">
+        <span>Explorar Catálogo</span>
+      </div>
+      <div class="carousel-row" id="catalog-grid" style="flex-wrap: wrap; overflow-x: visible;">
+        <!-- Inserido dinamicamente -->
+      </div>
+    </section>
+  </main>
+
+  <!-- =========================================================================
+       3. TELA: PERFIL KIDS (AMBIENTE INFANTIL SEGURO)
+       ========================================================================= -->
+  <main class="view-screen" id="view-kids">
+    <!-- Banner Lúdico Kids -->
+    <section class="kids-hero-card">
+      <div class="kids-avatar-banner">🦁</div>
+      <h1 class="kids-title">Espaço Kids</h1>
+      <span class="kids-badge">Ambiente 100% Protegido</span>
+      <p style="color: #fed7aa; font-size: 0.85rem; margin-top: 8px;">Desenhos, animes e aventuras infantis</p>
+    </section>
+
+    <!-- Busca Kids -->
+    <div class="search-container">
+      <div class="search-input-wrapper">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="kids-search-input" class="search-input" placeholder="Buscar desenhos favoritos..." autocomplete="off">
+      </div>
+    </div>
+
+    <!-- Carrossel de Desenhos Kids -->
+    <section>
+      <div class="section-title" style="color: #fb923c;">
+        <span>Desenhos e Animações</span>
+      </div>
+      <div class="carousel-row" id="kids-carousel-cartoons">
+        <!-- Inserido dinamicamente -->
+      </div>
+    </section>
+
+    <!-- Catálogo Infantil -->
+    <section>
+      <div class="section-title" style="color: #fb923c;">
+        <span>Mais Aventuras</span>
+      </div>
+      <div class="carousel-row" id="kids-catalog-grid" style="flex-wrap: wrap; overflow-x: visible;">
+        <!-- Inserido dinamicamente -->
+      </div>
+    </section>
+  </main>
+
+  <!-- =========================================================================
+       MODAL: SELEÇÃO DE DISPOSITIVOS SMART TV / CHROMECAST
+       ========================================================================= -->
+  <div class="modal-overlay" id="modal-devices">
+    <div class="remote-sheet">
+      <div class="sheet-handle"></div>
+      <div class="remote-header">
+        <div class="remote-tv-name">
+          <span>📺</span>
+          <span>Transmitir para Smart TV</span>
+        </div>
+        <button class="btn-icon" id="btn-close-devices">✕</button>
+      </div>
+
+      <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 16px;">
+        Selecione um aparelho na mesma rede Wi-Fi:
+      </p>
+
+      <div id="devices-list" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+        <!-- Dispositivos encontrados -->
+      </div>
+
+      <button class="btn-secondary" id="btn-refresh-devices" style="width: 100%;">
+        🔄 Procurar TVs Novamente
+      </button>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       MODAL: CONTROLE REMOTO CAST NA SMART TV
+       ========================================================================= -->
+  <div class="modal-overlay" id="modal-remote">
+    <div class="remote-sheet">
+      <div class="sheet-handle"></div>
+      <div class="remote-header">
+        <div class="remote-tv-name">
+          <span style="color: #10b981;">●</span>
+          <span id="remote-device-label">Smart TV Sala</span>
+        </div>
+        <button class="btn-icon" id="btn-close-remote">✕</button>
+      </div>
+
+      <div class="remote-media-box">
+        <div class="remote-media-title" id="remote-media-title">Interestelar (2014)</div>
+        <input type="range" class="remote-scrubber" id="remote-scrubber" min="0" max="100" value="0">
+        <div class="remote-time-labels">
+          <span id="remote-time-current">00:00:00</span>
+          <span id="remote-time-total">00:00:00</span>
+        </div>
+      </div>
+
+      <!-- Controles de Play / Pause / Skip -->
+      <div class="remote-controls-row">
+        <button class="btn-remote-skip" id="btn-remote-rev" title="-10s">-10s</button>
+        <button class="btn-remote-play" id="btn-remote-play-pause">▶</button>
+        <button class="btn-remote-skip" id="btn-remote-fwd" title="+30s">+30s</button>
+      </div>
+
+      <!-- Controle de Volume -->
+      <div class="remote-volume-row">
+        <span>🔈</span>
+        <input type="range" class="volume-slider" id="remote-volume-slider" min="0" max="100" value="80">
+        <span>🔊</span>
+      </div>
+
+      <button class="btn-disconnect" id="btn-remote-disconnect">
+        Desconectar da TV
+      </button>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       MODAL: TECLADO PIN DE 4 DÍGITOS
+       ========================================================================= -->
+  <div class="modal-overlay" id="modal-pin">
+    <div class="pin-sheet">
+      <h3 style="font-size: 1.2rem; font-weight: 700; margin-bottom: 6px;">Digite o PIN de Segurança</h3>
+      <p style="font-size: 0.85rem; color: var(--text-muted); text-align: center;" id="pin-modal-desc">
+        Este perfil está protegido por senha
+      </p>
+
+      <div class="pin-dots">
+        <div class="pin-dot" id="p-dot-0"></div>
+        <div class="pin-dot" id="p-dot-1"></div>
+        <div class="pin-dot" id="p-dot-2"></div>
+        <div class="pin-dot" id="p-dot-3"></div>
+      </div>
+
+      <div class="keypad-grid">
+        <button class="key-btn" data-key="1">1</button>
+        <button class="key-btn" data-key="2">2</button>
+        <button class="key-btn" data-key="3">3</button>
+        <button class="key-btn" data-key="4">4</button>
+        <button class="key-btn" data-key="5">5</button>
+        <button class="key-btn" data-key="6">6</button>
+        <button class="key-btn" data-key="7">7</button>
+        <button class="key-btn" data-key="8">8</button>
+        <button class="key-btn" data-key="9">9</button>
+        <button class="key-btn" id="btn-pin-cancel" style="font-size: 1rem; color: var(--text-muted);">Cancelar</button>
+        <button class="key-btn" data-key="0">0</button>
+        <button class="key-btn" id="btn-pin-backspace" style="font-size: 1.2rem;">⌫</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       MODAL: PLAYER DE VÍDEO LOCAL (ASSISTIR NO CELULAR)
+       ========================================================================= -->
+  <div class="modal-overlay" id="modal-player">
+    <div class="video-container">
+      <button class="player-close-btn" id="btn-player-close">✕</button>
+      <video id="html5-video" class="mobile-video" controls playsinline webkit-playsinline></video>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
