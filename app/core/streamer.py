@@ -397,6 +397,15 @@ class TVCastManager(QObject):
                 cast_device.wait()
                 self.active_chromecast = cast_device
 
+                import pychromecast
+                if cast_device.app_id != pychromecast.APP_MEDIA_RECEIVER:
+                    try:
+                        cast_device.start_app(pychromecast.APP_MEDIA_RECEIVER)
+                        cast_device.wait()
+                        time.sleep(1.0)
+                    except Exception as app_err:
+                        logger.debug(f"Aviso ao iniciar APP_MEDIA_RECEIVER: {app_err}")
+
                 mc = cast_device.media_controller
                 mc.play_media(
                     media_url,
