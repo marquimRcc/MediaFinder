@@ -15,24 +15,38 @@ from PySide6.QtCore import Qt, QSize, QThread, Signal
 from PySide6.QtGui import QPixmap, QImage, QClipboard
 
 from app.utils.system_ops import open_file, reveal_in_explorer
-from app.utils.media_helpers import format_file_size, format_timestamp
+from app.utils.media_helpers import format_file_size, format_timestamp, resolve_poster_source
 
 
 class ImageLoaderThread(QThread):
-    """Carrega miniaturas de imagens em segundo plano com proteções de segurança."""
-    image_loaded = Signal(str, QPixmap, str) # (path, pixmap, resolution_str)
+    """Carrega miniaturas de imagens e pôsteres em segundo plano com proteções de segurança."""
+    image_loaded = Signal(str, QPixmap, str) # (path_or_url, pixmap, resolution_str)
 
-    def __init__(self, file_path: str, max_size: QSize, parent=None):
+    def __init__(self, target: str, max_size: QSize, parent=None):
         super().__init__(parent)
-        self.file_path = file_path
+        self.target = target
         self.max_size = max_size
 
     def run(self):
         try:
-            if not os.path.exists(self.file_path):
+            import io
+            import urllib.request
+            img = None
+
+            if self.target.startswith(("http://", "https://")):
+                req = urllib.request.Request(
+                    self.target,
+                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) MediaFinder/1.0"}
+                )
+                with urllib.request.urlopen(req, timeout=6.0) as resp:
+                    raw_data = resp.read()
+                    img = Image.open(io.BytesIO(raw_data))
+            elif os.path.isfile(self.target):
+                img = Image.open(self.target)
+            else:
                 return
 
-            with Image.open(self.file_path) as img:
+            with img:
                 orig_w, orig_h = img.size
                 res_str = f"{orig_w} × {orig_h} px"
                 
@@ -48,7 +62,7 @@ class ImageLoaderThread(QThread):
                 qimg = QImage(data, img.width, img.height, img.width * (4 if img.mode == "RGBA" else 3), qformat)
                 pixmap = QPixmap.fromImage(qimg)
                 
-                self.image_loaded.emit(self.file_path, pixmap, res_str)
+                self.image_loaded.emit(self.target, pixmap, res_str)
         except (Image.DecompressionBombError, Image.DecompressionBombWarning):
             # Imagem excede os limites de segurança de memória
             pass
@@ -246,6 +260,9 @@ class PreviewPanel(QFrame):
         self.btn_copy_folder.setEnabled(True)
         self.lbl_res.setVisible(False)
 
+        # Resolução de pôster / imagem
+        source_path, is_remote = resolve_poster_source(file_data)
+
         if cat == "pluto" or file_data.get("is_live_stream"):
             ch_name = file_data.get("channel_name", name)
             self.lbl_name.setText(ch_name)
@@ -264,15 +281,24 @@ class PreviewPanel(QFrame):
 
             self.text_preview.setVisible(False)
             self.img_container.setVisible(True)
-            self.lbl_preview.setPixmap(QPixmap())
-            self.lbl_preview.setText(
-                f"<div style='text-align: center;'>"
-                f"<span style='font-size: 34px;'>🪐</span><br><br>"
-                f"<b style='font-size: 15px; color: #38BDF8;'>{ch_name}</b><br><br>"
-                f"<span style='background-color: #DC2626; color: #FFFFFF; font-weight: bold; font-size: 11px; padding: 3px 8px; border-radius: 4px;'>🔴 AO VIVO</span><br><br>"
-                f"<span style='color: #94A3B8; font-size: 11px;'>Pluto TV Brasil</span>"
-                f"</div>"
-            )
+
+            if source_path:
+                self.lbl_preview.setText("Carregando logo...")
+                if self._loader_thread and self._loader_thread.isRunning():
+                    self._loader_thread.terminate()
+                self._loader_thread = ImageLoaderThread(source_path, QSize(260, 160), self)
+                self._loader_thread.image_loaded.connect(self._on_image_loaded)
+                self._loader_thread.start()
+            else:
+                self.lbl_preview.setPixmap(QPixmap())
+                self.lbl_preview.setText(
+                    f"<div style='text-align: center;'>"
+                    f"<span style='font-size: 34px;'>🪐</span><br><br>"
+                    f"<b style='font-size: 15px; color: #38BDF8;'>{ch_name}</b><br><br>"
+                    f"<span style='background-color: #DC2626; color: #FFFFFF; font-weight: bold; font-size: 11px; padding: 3px 8px; border-radius: 4px;'>🔴 AO VIVO</span><br><br>"
+                    f"<span style='color: #94A3B8; font-size: 11px;'>Pluto TV Brasil</span>"
+                    f"</div>"
+                )
             return
 
         text_extensions = {".txt", ".nfo", ".srt", ".vtt", ".sub", ".log", ".json", ".xml", ".ini", ".inf"}
@@ -298,18 +324,40 @@ class PreviewPanel(QFrame):
             if self._loader_thread and self._loader_thread.isRunning():
                 self._loader_thread.terminate()
             
-            self._loader_thread = ImageLoaderThread(file_path, QSize(300, 200), self)
+            target_img = source_path or file_path
+            self._loader_thread = ImageLoaderThread(target_img, QSize(300, 200), self)
             self._loader_thread.image_loaded.connect(self._on_image_loaded)
             self._loader_thread.start()
         elif cat == "video":
-            self.lbl_preview.setPixmap(QPixmap())
-            self.lbl_preview.setText(
-                f"<div style='text-align: center;'>"
-                f"<span style='font-size: 32px;'>🎬</span><br><br>"
-                f"<b style='font-size: 15px; color: #60A5FA;'>VÍDEO ({ext.upper()})</b><br>"
-                f"<span style='color: #94A3B8; font-size: 11px;'>Clique em 'Abrir Arquivo' ou aperte Enter</span>"
-                f"</div>"
-            )
+            meta_title = file_data.get("meta_title")
+            meta_year = file_data.get("meta_year")
+            rating = file_data.get("imdb_rating")
+            genre = file_data.get("meta_genre")
+
+            if meta_title:
+                title_disp = f"{meta_title} ({meta_year})" if meta_year else meta_title
+                self.lbl_name.setText(title_disp)
+                if rating:
+                    self.lbl_size.setText(f"★ IMDb {rating:.1f} • {genre or 'Filme'} | {format_file_size(size)}")
+                elif genre:
+                    self.lbl_size.setText(f"Gênero: {genre} | {format_file_size(size)}")
+
+            if source_path:
+                self.lbl_preview.setText("Carregando pôster...")
+                if self._loader_thread and self._loader_thread.isRunning():
+                    self._loader_thread.terminate()
+                self._loader_thread = ImageLoaderThread(source_path, QSize(260, 200), self)
+                self._loader_thread.image_loaded.connect(self._on_image_loaded)
+                self._loader_thread.start()
+            else:
+                self.lbl_preview.setPixmap(QPixmap())
+                self.lbl_preview.setText(
+                    f"<div style='text-align: center;'>"
+                    f"<span style='font-size: 32px;'>🎬</span><br><br>"
+                    f"<b style='font-size: 15px; color: #60A5FA;'>VÍDEO ({ext.upper()})</b><br>"
+                    f"<span style='color: #94A3B8; font-size: 11px;'>Clique em 'Abrir Arquivo' ou aperte Enter</span>"
+                    f"</div>"
+                )
         elif cat == "audio":
             self.lbl_preview.setPixmap(QPixmap())
             self.lbl_preview.setText(
@@ -328,17 +376,16 @@ class PreviewPanel(QFrame):
                 f"</div>"
             )
 
-    def _on_image_loaded(self, file_path: str, pixmap: QPixmap, res_str: str):
+    def _on_image_loaded(self, path_or_url: str, pixmap: QPixmap, res_str: str):
         """Slot chamado quando o carregamento da imagem em segundo plano termina."""
-        if self.current_file_data and self.current_file_data.get("path") == file_path:
-            if not pixmap.isNull():
-                self.lbl_preview.setText("")
-                self.lbl_preview.setPixmap(pixmap)
-                if res_str:
-                    self.lbl_res.setText(f"Resolução: {res_str}")
-                    self.lbl_res.setVisible(True)
-            else:
-                self.lbl_preview.setText("Não foi possível gerar miniatura.")
+        if not pixmap.isNull():
+            self.lbl_preview.setText("")
+            self.lbl_preview.setPixmap(pixmap)
+            if res_str and self.current_file_data and self.current_file_data.get("category") == "image":
+                self.lbl_res.setText(f"Resolução: {res_str}")
+                self.lbl_res.setVisible(True)
+        else:
+            self.lbl_preview.setText("Não foi possível gerar miniatura.")
 
     def _reset_view(self):
         self.text_preview.setVisible(False)

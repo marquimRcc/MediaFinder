@@ -15,10 +15,12 @@ from PySide6.QtGui import (
 )
 
 from app.utils.system_ops import open_file, reveal_in_explorer
+from app.utils.media_helpers import resolve_poster_source
+from app.core.metadata import get_posters_dir
 
 
 class ImageFetchSignal(QObject):
-    loaded = Signal(str, QPixmap)
+    loaded = Signal(str, QImage)
 
 
 class MediaCardDelegate(QStyledItemDelegate):
@@ -32,40 +34,59 @@ class MediaCardDelegate(QStyledItemDelegate):
         super().__init__(parent)
         self.pixmap_cache: Dict[str, QPixmap] = {}
         self._loading_keys = set()
-        self._executor = ThreadPoolExecutor(max_workers=3)
+        self._executor = ThreadPoolExecutor(max_workers=6)
         self.signal_bridge = ImageFetchSignal()
         self.signal_bridge.loaded.connect(self._on_image_loaded)
 
-    def _on_image_loaded(self, key: str, pixmap: QPixmap):
-        self.pixmap_cache[key] = pixmap
-        if self.parent():
-            self.parent().viewport().update()
+    def _on_image_loaded(self, key: str, qimg: QImage):
+        if not qimg.isNull():
+            self.pixmap_cache[key] = QPixmap.fromImage(qimg)
+            if self.parent():
+                self.parent().viewport().update()
 
-    def _load_image_async(self, key: str, url_or_path: str):
+    def _load_image_async(self, key: str, url_or_path: str, is_remote: bool = False, file_id: Optional[int] = None):
         if key in self.pixmap_cache or key in self._loading_keys:
             return
         self._loading_keys.add(key)
 
         def _fetch():
             try:
-                pixmap = None
-                if url_or_path.startswith(("http://", "https://")):
+                import io
+                from PIL import Image
+                qimg = None
+
+                if is_remote and url_or_path.startswith(("http://", "https://")):
                     req = urllib.request.Request(
                         url_or_path,
-                        headers={"User-Agent": "Mozilla/5.0 MediaFinder/1.0"}
+                        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) MediaFinder/1.0"}
                     )
-                    with urllib.request.urlopen(req, timeout=5.0) as resp:
-                        img_data = resp.read()
-                        qimg = QImage.fromData(img_data)
-                        if not qimg.isNull():
-                            pixmap = QPixmap.fromImage(qimg)
-                elif os.path.exists(url_or_path):
-                    qimg = QImage(url_or_path)
-                    if not qimg.isNull():
-                        pixmap = QPixmap.fromImage(qimg)
+                    with urllib.request.urlopen(req, timeout=6.0) as resp:
+                        raw_data = resp.read()
+                        if file_id and len(raw_data) > 1024:
+                            try:
+                                save_file = get_posters_dir() / f"{file_id}.jpg"
+                                with open(save_file, "wb") as f_out:
+                                    f_out.write(raw_data)
+                            except Exception:
+                                pass
+                        with Image.open(io.BytesIO(raw_data)) as im:
+                            im.thumbnail((self.CARD_WIDTH * 2, self.POSTER_HEIGHT * 2), Image.Resampling.LANCZOS)
+                            if im.mode not in ("RGB", "RGBA"):
+                                im = im.convert("RGBA")
+                            data = im.tobytes("raw", im.mode)
+                            fmt = QImage.Format_RGBA8888 if im.mode == "RGBA" else QImage.Format_RGB888
+                            qimg = QImage(data, im.width, im.height, im.width * (4 if im.mode == "RGBA" else 3), fmt).copy()
+                elif os.path.isfile(url_or_path):
+                    with Image.open(url_or_path) as im:
+                        im.thumbnail((self.CARD_WIDTH * 2, self.POSTER_HEIGHT * 2), Image.Resampling.LANCZOS)
+                        if im.mode not in ("RGB", "RGBA"):
+                            im = im.convert("RGBA")
+                        data = im.tobytes("raw", im.mode)
+                        fmt = QImage.Format_RGBA8888 if im.mode == "RGBA" else QImage.Format_RGB888
+                        qimg = QImage(data, im.width, im.height, im.width * (4 if im.mode == "RGBA" else 3), fmt).copy()
 
-                if pixmap and not pixmap.isNull():
-                    scaled = pixmap.scaled(
+                if qimg and not qimg.isNull():
+                    scaled = qimg.scaled(
                         self.CARD_WIDTH - 8,
                         self.POSTER_HEIGHT,
                         Qt.KeepAspectRatioByExpanding,
@@ -115,16 +136,11 @@ class MediaCardDelegate(QStyledItemDelegate):
         # Fundo do Pôster
         painter.fillRect(poster_rect, QColor("#0B0E14"))
 
-        # Determina a imagem (pôster local, pôster web, thumbnail ou logo)
-        img_url = (
-            data.get("poster_local")
-            or data.get("poster_url")
-            or data.get("logo")
-            or data.get("thumbnail")
-        )
-        is_live = data.get("is_live_stream", False)
+        # Determina a imagem (pôster local no disco, URL web, thumbnail ou logo)
+        img_src, is_remote = resolve_poster_source(data)
+        is_live = data.get("is_live_stream", False) or data.get("category") == "pluto"
 
-        cache_key = img_url or data.get("id", "")
+        cache_key = img_src or str(data.get("id", ""))
         pixmap = self.pixmap_cache.get(cache_key)
 
         if pixmap and not pixmap.isNull():
@@ -132,12 +148,14 @@ class MediaCardDelegate(QStyledItemDelegate):
             dy = poster_rect.y() + (poster_rect.height() - pixmap.height()) // 2
             painter.drawPixmap(dx, dy, pixmap)
         else:
-            if img_url:
-                self._load_image_async(cache_key, img_url)
+            if img_src:
+                self._load_image_async(cache_key, img_src, is_remote, data.get("id"))
 
-            icon_char = "🪐" if is_live else ("🎬" if data.get("category") == "video" else "📄")
-            painter.setFont(QFont("Noto Color Emoji", 28))
-            painter.setPen(QColor("#475569"))
+            icon_char = "🪐" if is_live else ("🎬" if data.get("category") == "video" else ("🖼️" if data.get("category") == "image" else "📄"))
+            fallback_font = QFont(painter.font())
+            fallback_font.setPointSize(22)
+            painter.setFont(fallback_font)
+            painter.setPen(QColor("#64748B"))
             painter.drawText(poster_rect, Qt.AlignCenter, icon_char)
 
         painter.restore()

@@ -90,3 +90,59 @@ def get_drive_letter(path_str: str) -> str:
     except Exception:
         return ""
 
+
+def resolve_poster_source(data: dict) -> tuple:
+    """
+    Identifica a origem da imagem do pôster ou logo para uma mídia.
+    Retorna (caminho_ou_url, is_remote).
+    Se for arquivo local existente no disco, is_remote será False.
+    Se for URL remota (http/https), is_remote será True.
+    Se não houver pôster, retorna (None, False).
+    """
+    if not data or not isinstance(data, dict):
+        return None, False
+
+    import re
+    from app.core.metadata import get_posters_dir
+
+    posters_dir = get_posters_dir()
+
+    # 1. Pôster salvo em disco pelo ID do arquivo
+    file_id = data.get("id") or data.get("file_id")
+    if file_id is not None:
+        try:
+            cand = posters_dir / f"{int(file_id)}.jpg"
+            if cand.is_file() and cand.stat().st_size > 0:
+                return str(cand), False
+        except (ValueError, TypeError):
+            pass
+
+    # 2. poster_local (rota /api/media/{id}/poster ou caminho absoluto)
+    poster_local = data.get("poster_local")
+    if poster_local and isinstance(poster_local, str):
+        match = re.search(r"/api/media/(\d+)/poster", poster_local)
+        if match:
+            cand = posters_dir / f"{match.group(1)}.jpg"
+            if cand.is_file() and cand.stat().st_size > 0:
+                return str(cand), False
+        elif os.path.isfile(poster_local) and os.path.getsize(poster_local) > 0:
+            return poster_local, False
+
+    # 3. Arquivo de imagem do usuário (fotos/wallpapers)
+    if data.get("category") == "image":
+        img_path = data.get("path")
+        if img_path and os.path.isfile(img_path) and os.path.getsize(img_path) > 0:
+            return img_path, False
+
+    # 4. URLs remotas ou caminhos específicos (poster_url, logo, thumbnail, backdrop_url)
+    for key in ("poster_url", "logo", "thumbnail", "backdrop_url"):
+        val = data.get(key)
+        if val and isinstance(val, str):
+            val_clean = val.strip()
+            if val_clean.startswith(("http://", "https://")):
+                return val_clean, True
+            elif os.path.isfile(val_clean) and os.path.getsize(val_clean) > 0:
+                return val_clean, False
+
+    return None, False
+

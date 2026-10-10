@@ -138,7 +138,8 @@ class FilterBar(QWidget):
 
             if cat_id == "pluto":
                 from app.core.pluto_tv import PlutoTVService
-                pluto_count = len(PlutoTVService.get_instance().get_channels())
+                service = PlutoTVService.get_instance()
+                pluto_count = len(service._cached_channels) if service._cached_channels else 0
                 count_str = format_count(pluto_count) if pluto_count > 0 else ""
             elif cat_id == "all":
                 count_str = format_count(total_files) if total_files > 0 else ""
