@@ -10,6 +10,8 @@ const App = {
   pinBuffer: '',
   castPollTimer: null,
   activeCastFileId: null,
+  activeCastPlutoChannel: null,
+  hlsInstance: null,
   progressInterval: null,
   currentPlayingFileId: null,
   selectedCategory: 'video',
@@ -294,6 +296,10 @@ const App = {
   },
 
   async loadCatalog() {
+    if (this.selectedCategory === 'pluto') {
+      return this.loadPlutoCatalog();
+    }
+
     try {
       const isSearching = !!(this.searchQuery && this.searchQuery.trim());
       const heroSection = document.getElementById('hero-continue');
@@ -339,11 +345,226 @@ const App = {
     }
   },
 
+  async loadPlutoCatalog() {
+    try {
+      const isSearching = !!(this.searchQuery && this.searchQuery.trim());
+      const heroSection = document.getElementById('hero-continue');
+      const recentSection = document.getElementById('carousel-recent')?.closest('section');
+
+      if (heroSection) heroSection.style.display = 'none';
+      if (recentSection) recentSection.style.display = 'none';
+
+      const isKids = this.currentProfile && this.currentProfile.is_kids ? '1' : '0';
+      const res = await fetch(`/api/pluto/channels?profile=${this.currentProfile ? this.currentProfile.id : ''}&is_kids=${isKids}`);
+      const data = await res.json();
+      let channels = data.channels || [];
+
+      if (isSearching) {
+        const q = this.searchQuery.trim().toLowerCase();
+        channels = channels.filter(c =>
+          (c.name && c.name.toLowerCase().includes(q)) ||
+          (c.category && c.category.toLowerCase().includes(q)) ||
+          (c.summary && c.summary.toLowerCase().includes(q))
+        );
+      }
+
+      const container = document.getElementById('catalog-grid');
+      container.innerHTML = '';
+
+      if (channels.length === 0) {
+        if (isSearching) {
+          container.innerHTML = `
+            <div class="search-empty-state">
+              <div class="empty-icon">🪐</div>
+              <div class="empty-title">Nenhum canal da Pluto TV para "${this.escapeHtml(this.searchQuery)}"</div>
+              <div class="empty-desc">Tente buscar por outro canal, categoria ou gênero.</div>
+              <button class="btn-clear-search" id="btn-empty-clear">Limpar busca e ver canais</button>
+            </div>
+          `;
+          document.getElementById('btn-empty-clear')?.addEventListener('click', () => this.clearSearch());
+        } else {
+          container.innerHTML = '<div style="color: var(--text-muted); padding: 20px; text-align: center;">Nenhum canal Pluto TV disponível no momento.</div>';
+        }
+        return;
+      }
+
+      channels.forEach(ch => {
+        container.appendChild(this.createPlutoCard(ch));
+      });
+    } catch (e) {
+      console.error('Erro ao carregar canais Pluto TV:', e);
+    }
+  },
+
+  createPlutoCard(channel, isKids = false) {
+    const card = document.createElement('div');
+    card.className = 'media-card';
+    card.onclick = () => this.openPlutoDetails(channel);
+
+    const poster = document.createElement('div');
+    poster.className = 'media-poster';
+
+    const fallbackIcon = document.createElement('div');
+    fallbackIcon.className = 'media-poster-fallback';
+    fallbackIcon.textContent = '🪐';
+
+    const imgSrc = channel.logo || channel.thumbnail;
+    if (imgSrc) {
+      const img = document.createElement('img');
+      img.src = imgSrc;
+      img.alt = channel.name;
+      img.className = 'pluto-logo';
+      img.loading = 'lazy';
+      img.onerror = () => {
+        img.style.display = 'none';
+        fallbackIcon.style.display = 'block';
+      };
+      poster.appendChild(img);
+      fallbackIcon.style.display = 'none';
+    }
+    poster.appendChild(fallbackIcon);
+
+    const liveBadge = document.createElement('span');
+    liveBadge.className = 'badge-live-card';
+    liveBadge.textContent = '🔴 AO VIVO';
+    poster.appendChild(liveBadge);
+
+    if (channel.number) {
+      const chBadge = document.createElement('span');
+      chBadge.className = 'badge-channel-card';
+      chBadge.textContent = `CH ${channel.number}`;
+      poster.appendChild(chBadge);
+    }
+
+    const title = document.createElement('div');
+    title.className = 'media-card-title';
+    title.textContent = channel.name;
+
+    const meta = document.createElement('div');
+    meta.className = 'media-card-meta';
+    meta.textContent = `Pluto TV • ${channel.category || 'Geral'}`;
+
+    card.appendChild(poster);
+    card.appendChild(title);
+    card.appendChild(meta);
+    return card;
+  },
+
+  openPlutoDetails(channel) {
+    const modal = document.getElementById('modal-details');
+    modal.classList.add('active');
+
+    document.getElementById('details-title').textContent = channel.name;
+    document.getElementById('details-original-title').textContent = 'Pluto TV Brasil (Transmissão Oficial Ao Vivo)';
+
+    const imdbEl = document.getElementById('details-imdb-badge');
+    imdbEl.textContent = '🔴 AO VIVO';
+    imdbEl.style.display = 'inline-flex';
+    imdbEl.style.backgroundColor = '#dc2626';
+    imdbEl.style.color = '#ffffff';
+
+    const ratedEl = document.getElementById('details-rated-badge');
+    ratedEl.textContent = channel.number ? `CH ${channel.number}` : 'FREE';
+    ratedEl.style.display = 'inline-block';
+
+    document.getElementById('details-year').textContent = '24/7';
+    document.getElementById('details-runtime').textContent = 'Ao Vivo';
+    document.getElementById('details-genre').textContent = channel.category || 'Streaming Gratuito';
+    document.getElementById('details-plot').textContent = channel.summary || 'Assista a este canal ao vivo da Pluto TV gratuitamente no MediaFinder com streaming direto ou transmissão na TV.';
+
+    const posterSrc = channel.logo || channel.thumbnail;
+    const posterImg = document.getElementById('details-poster-img');
+    const posterFallback = document.getElementById('details-poster-fallback');
+    if (posterSrc) {
+      posterImg.src = posterSrc;
+      posterImg.style.display = 'block';
+      posterFallback.style.display = 'none';
+    } else {
+      posterImg.style.display = 'none';
+      posterFallback.style.display = 'block';
+    }
+
+    const backdrop = document.getElementById('details-backdrop');
+    const backdropSrc = channel.thumbnail || channel.featured_image || posterSrc;
+    if (backdropSrc) {
+      backdrop.style.backgroundImage = `url('${backdropSrc}')`;
+    } else {
+      backdrop.style.backgroundImage = 'none';
+    }
+
+    document.getElementById('details-director').textContent = '';
+    document.getElementById('details-cast-section').style.display = 'none';
+
+    const playBtn = document.getElementById('btn-details-play');
+    const castBtn = document.getElementById('btn-details-cast');
+    const playLabel = document.getElementById('btn-details-play-label');
+    const castLabel = document.getElementById('btn-details-cast-label');
+    const restartContainer = document.getElementById('details-restart-container');
+
+    if (playLabel) playLabel.textContent = 'Assistir no Celular';
+    if (castLabel) castLabel.textContent = 'Transmitir na TV';
+    if (restartContainer) restartContainer.style.display = 'none';
+
+    playBtn.onclick = () => {
+      this.closeMediaDetails();
+      this.playPlutoStream(channel.stream_url, channel.name);
+    };
+
+    castBtn.onclick = () => {
+      this.closeMediaDetails();
+      this.openCastDevicesModal(null, null, channel);
+    };
+  },
+
+  playPlutoStream(streamUrl, channelName) {
+    this.currentPlayingFileId = null;
+    const modal = document.getElementById('modal-player');
+    const video = document.getElementById('html5-video');
+
+    if (this.hlsInstance) {
+      this.hlsInstance.destroy();
+      this.hlsInstance = null;
+    }
+
+    modal.classList.add('active');
+
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = streamUrl;
+      video.play().catch(() => {});
+    } else if (window.Hls && Hls.isSupported()) {
+      this.hlsInstance = new Hls({ enableWorker: true });
+      this.hlsInstance.loadSource(streamUrl);
+      this.hlsInstance.attachMedia(video);
+      this.hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+        video.play().catch(() => {});
+      });
+    } else {
+      video.src = streamUrl;
+      video.play().catch(() => {});
+    }
+  },
+
   async loadKidsContent() {
     try {
       const isSearching = !!(this.searchQuery && this.searchQuery.trim());
       const cartoonSec = document.getElementById('kids-carousel-cartoons')?.closest('section');
+      const plutoKidsSec = document.getElementById('kids-pluto-section');
       if (cartoonSec) cartoonSec.style.display = isSearching ? 'none' : 'block';
+      if (plutoKidsSec) plutoKidsSec.style.display = isSearching ? 'none' : 'block';
+
+      // Carrega canais da Pluto TV Kids (Ao Vivo)
+      const plutoKidsContainer = document.getElementById('kids-carousel-pluto');
+      if (plutoKidsContainer && !isSearching) {
+        plutoKidsContainer.innerHTML = '';
+        fetch('/api/pluto/channels?is_kids=1')
+          .then(r => r.json())
+          .then(data => {
+            (data.channels || []).forEach(ch => {
+              plutoKidsContainer.appendChild(this.createPlutoCard(ch, true));
+            });
+          })
+          .catch(e => console.debug('Erro ao carregar Pluto Kids:', e));
+      }
 
       const query = isSearching ? `&query=${encodeURIComponent(this.searchQuery.trim())}` : '';
       const res = await fetch(`/api/catalog?profile=kids&is_kids=1${query}&limit=60`);
@@ -618,6 +839,11 @@ const App = {
     const modal = document.getElementById('modal-player');
     const video = document.getElementById('html5-video');
 
+    if (this.hlsInstance) {
+      this.hlsInstance.destroy();
+      this.hlsInstance = null;
+    }
+
     if (this.currentPlayingFileId && video.duration > 0) {
       this.saveProgress(this.currentPlayingFileId, video.currentTime, video.duration);
     }
@@ -626,7 +852,9 @@ const App = {
     video.src = '';
     modal.classList.remove('active');
     clearInterval(this.progressInterval);
-    this.loadContinueWatching();
+    if (this.selectedCategory !== 'pluto') {
+      this.loadContinueWatching();
+    }
   },
 
   async saveProgress(fileId, pos, dur) {
@@ -650,9 +878,10 @@ const App = {
   // =========================================================================
   // CONTROLE REMOTO CAST PARA SMART TV
   // =========================================================================
-  async openCastDevicesModal(fileId, startTime = null) {
+  async openCastDevicesModal(fileId, startTime = null, plutoChannel = null) {
     this.activeCastFileId = fileId;
     this.activeCastStartTime = startTime;
+    this.activeCastPlutoChannel = plutoChannel;
     const modal = document.getElementById('modal-devices');
     modal.classList.add('active');
     await this.fetchDevices();
@@ -691,12 +920,20 @@ const App = {
     try {
       const payload = {
         device_id: deviceId,
-        file_id: this.activeCastFileId,
         profile_id: this.currentProfile ? this.currentProfile.id : 'marcos'
       };
-      if (this.activeCastStartTime !== null && this.activeCastStartTime !== undefined) {
-        payload.start_time = this.activeCastStartTime;
+
+      if (this.activeCastPlutoChannel) {
+        payload.channel_id = this.activeCastPlutoChannel.id;
+        payload.stream_url = this.activeCastPlutoChannel.stream_url;
+        payload.channel_name = this.activeCastPlutoChannel.name;
+      } else {
+        payload.file_id = this.activeCastFileId;
+        if (this.activeCastStartTime !== null && this.activeCastStartTime !== undefined) {
+          payload.start_time = this.activeCastStartTime;
+        }
       }
+
       const res = await fetch('/api/cast/play', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

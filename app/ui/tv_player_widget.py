@@ -784,7 +784,8 @@ class TVPlayerWidget(QWidget):
         self._target_offset_ms = max(0, int(offset_seconds * 1000))
         self._seek_applied = False
 
-        if not os.path.isfile(file_path):
+        is_stream = file_path.startswith(("http://", "https://"))
+        if not is_stream and not os.path.isfile(file_path):
             self.show_track_osd("⚠️ ARQUIVO INACESSÍVEL", "Avançando para o próximo programa...")
             self._trigger_auto_skip(1200)
             return
@@ -793,7 +794,7 @@ class TVPlayerWidget(QWidget):
             self.trigger_channel_transition(channel_number, channel_name or title)
             QTimer.singleShot(50, lambda: self.show_channel_osd(channel_number, channel_name or title, title))
 
-        url = QUrl.fromLocalFile(file_path)
+        url = QUrl(file_path) if is_stream else QUrl.fromLocalFile(file_path)
         self.player.setSource(url)
         self.player.play()
 

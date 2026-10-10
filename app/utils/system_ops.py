@@ -21,11 +21,29 @@ def is_dangerous_file(file_path: str) -> bool:
 
 def open_file(file_path: str) -> bool:
     """
-    Abre o arquivo no aplicativo padrão associado no sistema operacional (Linux/Windows/macOS).
+    Abre o arquivo no aplicativo padrão associado no sistema operacional (Linux/Windows/macOS),
+    ou reproduz fluxos de rede (HTTP/HTTPS/HLS).
     Bloqueia a execução direta de binários e scripts potencialmente perigosos por segurança,
     redirecionando para o gerenciador de arquivos (reveal_in_explorer).
     """
     try:
+        # Suporte a URLs de streaming e transmissões ao vivo
+        if file_path.startswith(("http://", "https://")):
+            if ".m3u8" in file_path:
+                for player in ["vlc", "mpv"]:
+                    if shutil.which(player):
+                        subprocess.Popen([player, file_path])
+                        return True
+            if sys.platform == "win32":
+                os.startfile(file_path)
+                return True
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", file_path])
+                return True
+            else:
+                subprocess.Popen(["xdg-open", file_path])
+                return True
+
         norm_path = os.path.normpath(file_path)
         if not os.path.exists(norm_path):
             return False

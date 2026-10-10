@@ -31,9 +31,10 @@ class CastDialog(QDialog):
     com controle de reprodução remoto em tempo real.
     """
 
-    def __init__(self, file_path: str, parent=None):
+    def __init__(self, file_path: str, title: Optional[str] = None, parent=None):
         super().__init__(parent)
         self.file_path = file_path
+        self.media_title = title
         self.manager = TVCastManager.get_instance()
         self.devices_by_id: Dict[str, TVDevice] = {}
         self._user_seeking = False
@@ -131,25 +132,36 @@ class CastDialog(QDialog):
         h_layout = QHBoxLayout(header_card)
         h_layout.setContentsMargins(10, 8, 10, 8)
 
-        lbl_icon = QLabel("🎬")
+        is_stream = self.file_path.startswith(("http://", "https://"))
+        icon_str = "🪐" if is_stream else "🎬"
+        lbl_icon = QLabel(icon_str)
         lbl_icon.setStyleSheet("font-size: 26px;")
         h_layout.addWidget(lbl_icon)
 
         info_layout = QVBoxLayout()
         info_layout.setSpacing(2)
-        file_name = os.path.basename(self.file_path)
-        lbl_file = QLabel(file_name)
-        lbl_file.setStyleSheet("font-size: 13px; font-weight: bold; color: #38BDF8;")
-        info_layout.addWidget(lbl_file)
 
-        try:
-            sz = os.path.getsize(self.file_path)
-            sz_str = format_file_size(sz)
-        except Exception:
-            sz_str = "-"
-        lbl_meta = QLabel(f"Tamanho: {sz_str} • IP Local: {get_local_ip()}")
-        lbl_meta.setStyleSheet("font-size: 11px; color: #94A3B8;")
-        info_layout.addWidget(lbl_meta)
+        if is_stream:
+            display_title = self.media_title or "Canal Pluto TV Ao Vivo"
+            lbl_file = QLabel(display_title)
+            lbl_file.setStyleSheet("font-size: 13px; font-weight: bold; color: #38BDF8;")
+            info_layout.addWidget(lbl_file)
+            lbl_meta = QLabel(f"Transmissão Ao Vivo (HLS) • Pluto TV • IP Local: {get_local_ip()}")
+            lbl_meta.setStyleSheet("font-size: 11px; color: #94A3B8;")
+            info_layout.addWidget(lbl_meta)
+        else:
+            file_name = os.path.basename(self.file_path)
+            lbl_file = QLabel(file_name)
+            lbl_file.setStyleSheet("font-size: 13px; font-weight: bold; color: #38BDF8;")
+            info_layout.addWidget(lbl_file)
+            try:
+                sz = os.path.getsize(self.file_path)
+                sz_str = format_file_size(sz)
+            except Exception:
+                sz_str = "-"
+            lbl_meta = QLabel(f"Tamanho: {sz_str} • IP Local: {get_local_ip()}")
+            lbl_meta.setStyleSheet("font-size: 11px; color: #94A3B8;")
+            info_layout.addWidget(lbl_meta)
         h_layout.addLayout(info_layout, 1)
 
         layout.addWidget(header_card)
@@ -315,8 +327,10 @@ class CastDialog(QDialog):
 
         self.lbl_scan_status.setText(f"Conectando a {device.name} e iniciando transmissão...")
         self.btn_start_cast.setEnabled(False)
-        self.btn_start_cast.setText("⌛ Conectando...")
-        self.manager.cast_media(device, self.file_path)
+        if self.file_path.startswith(("http://", "https://")):
+            self.manager.cast_stream(device, self.file_path, title=self.media_title or "Canal Pluto TV Ao Vivo")
+        else:
+            self.manager.cast_media(device, self.file_path)
 
     def _on_cast_started(self, device_name: str, file_name: str):
         self.btn_start_cast.setEnabled(True)

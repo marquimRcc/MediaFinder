@@ -1,0 +1,128 @@
+import os
+import time
+import uuid
+import json
+import logging
+import urllib.request
+import urllib.parse
+from typing import List, Dict, Any, Optional
+
+logger = logging.getLogger("MediaFinder.PlutoTV")
+
+PLUTO_API_CHANNELS = "https://api.pluto.tv/v2/channels"
+PLUTO_STITCHER_BASE = "https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/{channel_id}/master.m3u8"
+
+KIDS_CATEGORIES = {"infantil", "nickelodeon", "anime & geek", "desenhos"}
+
+class PlutoTVService:
+    """Serviço de integração com a API aberta e streams da Pluto TV."""
+
+    _instance: Optional["PlutoTVService"] = None
+
+    def __init__(self):
+        self._cached_channels: List[Dict[str, Any]] = []
+        self._last_fetch_time: float = 0.0
+        self._cache_ttl_seconds: float = 3600.0  # Cache de 1 hora
+        self._device_id: str = str(uuid.uuid4())
+
+    @classmethod
+    def get_instance(cls) -> "PlutoTVService":
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    def get_stream_url(self, channel_id: str) -> str:
+        """Gera a URL direta do master.m3u8 HLS com parâmetros de sessão válidos."""
+        sid = str(uuid.uuid4())
+        base = PLUTO_STITCHER_BASE.format(channel_id=channel_id)
+        params = {
+            "advertisingId": "",
+            "appName": "web",
+            "appVersion": "na",
+            "deviceDNT": "0",
+            "deviceId": self._device_id,
+            "deviceMake": "Chrome",
+            "deviceModel": "Chrome",
+            "deviceType": "web",
+            "deviceVersion": "na",
+            "sid": sid
+        }
+        return f"{base}?{urllib.parse.urlencode(params)}"
+
+    def get_channels(self, category: Optional[str] = None, is_kids: bool = False, force_refresh: bool = False) -> List[Dict[str, Any]]:
+        """Retorna lista de canais da Pluto TV (com cache e suporte a filtros)."""
+        now = time.time()
+        if force_refresh or not self._cached_channels or (now - self._last_fetch_time) > self._cache_ttl_seconds:
+            self._fetch_channels_from_api()
+
+        channels = list(self._cached_channels)
+
+        if is_kids:
+            channels = [
+                c for c in channels
+                if (c.get("category") or "").strip().lower() in KIDS_CATEGORIES
+                or "kids" in (c.get("name") or "").lower()
+                or "junior" in (c.get("name") or "").lower()
+            ]
+
+        if category and category.strip().lower() not in ("all", "todos"):
+            cat_lower = category.strip().lower()
+            channels = [c for c in channels if (c.get("category") or "").strip().lower() == cat_lower]
+
+        return channels
+
+    def _fetch_channels_from_api(self):
+        """Busca canais da API da Pluto TV e normaliza estrutura."""
+        try:
+            req = urllib.request.Request(
+                PLUTO_API_CHANNELS,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Accept": "application/json"
+                }
+            )
+            with urllib.request.urlopen(req, timeout=7.0) as resp:
+                raw_data = json.loads(resp.read().decode("utf-8"))
+
+            parsed_list = []
+            for item in raw_data:
+                ch_id = item.get("_id")
+                if not ch_id:
+                    continue
+
+                logo_dict = item.get("colorLogoPNG") or item.get("solidLogoPNG")
+                logo_url = logo_dict.get("path") if isinstance(logo_dict, dict) else ""
+
+                thumb_dict = item.get("thumbnail") or item.get("tile")
+                thumb_url = thumb_dict.get("path") if isinstance(thumb_dict, dict) else ""
+
+                feat_dict = item.get("featuredImage")
+                feat_url = feat_dict.get("path") if isinstance(feat_dict, dict) else ""
+
+                parsed_list.append({
+                    "id": ch_id,
+                    "name": item.get("name") or "Canal Pluto TV",
+                    "number": item.get("number") or 0,
+                    "slug": item.get("slug") or "",
+                    "category": item.get("category") or "Geral",
+                    "summary": item.get("summary") or "",
+                    "logo": logo_url,
+                    "thumbnail": thumb_url or feat_url or logo_url,
+                    "featured_image": feat_url or thumb_url or logo_url,
+                    "stream_url": self.get_stream_url(ch_id)
+                })
+
+            parsed_list.sort(key=lambda x: (x["number"] if x["number"] > 0 else 9999, x["name"]))
+            self._cached_channels = parsed_list
+            self._last_fetch_time = time.time()
+            logger.info(f"Pluto TV: {len(parsed_list)} canais carregados com sucesso.")
+        except Exception as e:
+            logger.error(f"Erro ao consultar API da Pluto TV: {e}")
+            if not self._cached_channels:
+                self._cached_channels = []
+
+    def get_categories(self, is_kids: bool = False) -> List[str]:
+        """Retorna lista única e ordenada de categorias de canais."""
+        channels = self.get_channels(is_kids=is_kids)
+        categories = sorted(list(set(c["category"] for c in channels if c.get("category"))))
+        return categories

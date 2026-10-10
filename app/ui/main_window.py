@@ -325,6 +325,48 @@ class MainWindow(QMainWindow):
         self.config.set("preview_visible", visible)
 
     def perform_search(self):
+        if self._current_category == "pluto":
+            from app.core.pluto_tv import PlutoTVService
+            svc = PlutoTVService.get_instance()
+            channels = svc.get_channels()
+            if self._current_query:
+                q = self._current_query.strip().lower()
+                channels = [
+                    c for c in channels
+                    if q in c["name"].lower() or q in c["category"].lower() or q in c.get("summary", "").lower()
+                ]
+
+            pluto_items = []
+            for ch in channels:
+                pluto_items.append({
+                    "id": f"pluto_{ch['id']}",
+                    "name": f"{ch['name']} — {ch['category']}",
+                    "extension": "HLS",
+                    "size": 0,
+                    "drive": "PLUTO",
+                    "mtime": 0,
+                    "path": ch["stream_url"],
+                    "category": "pluto",
+                    "is_live_stream": True,
+                    "channel_id": ch["id"],
+                    "channel_name": ch["name"],
+                    "pluto_category": ch["category"],
+                    "summary": ch.get("summary", ""),
+                    "logo": ch.get("logo", ""),
+                    "thumbnail": ch.get("thumbnail", ""),
+                    "number": ch.get("number", 0),
+                    "parent_dir": f"Pluto TV Ao Vivo • {ch['category']}"
+                })
+
+            self.results_table.set_results(pluto_items)
+            query_desc = f' para "{self._current_query}"' if self._current_query else ""
+            self.lbl_status_results.setText(
+                f"🪐 Pluto TV: {len(pluto_items)} canais ao vivo disponíveis{query_desc}"
+            )
+            if not pluto_items:
+                self.preview_panel.set_file_data(None)
+            return
+
         folders = self.config.get_watched_folders()
         if not folders:
             self.results_table.set_results([])
@@ -594,12 +636,19 @@ class MainWindow(QMainWindow):
             self.tv_window.raise_()
             self.tv_window.activateWindow()
 
-    def _open_cast_dialog(self, file_path: str):
+    def _open_cast_dialog(self, file_path: str, title: Optional[str] = None):
         """Abre o diálogo de transmissão para TV para o arquivo indicado."""
-        if not file_path or not os.path.exists(file_path):
+        is_stream = file_path.startswith(("http://", "https://")) if file_path else False
+        if not file_path or (not is_stream and not os.path.exists(file_path)):
             QMessageBox.warning(self, "Aviso", f"Arquivo não encontrado ou inacessível:\n{file_path}")
             return
-        self.cast_dialog = CastDialog(file_path, parent=self)
+
+        if title is None and is_stream:
+            sel = self.results_table.get_selected_file()
+            if sel and sel.get("path") == file_path:
+                title = sel.get("channel_name") or sel.get("name")
+
+        self.cast_dialog = CastDialog(file_path, title=title, parent=self)
         if hasattr(self, 'app_icon'):
             self.cast_dialog.setWindowIcon(self.app_icon)
         self.cast_dialog.show()

@@ -466,9 +466,39 @@ def run_tests():
                 assert found_item["imdb_rating"] == 7.4
                 assert found_item["meta_year"] == 1989
 
+            # Testes da integração com a Pluto TV
+            from app.core.pluto_tv import PlutoTVService
+            pluto_svc = PlutoTVService.get_instance()
+            pluto_channels = pluto_svc.get_channels()
+            assert len(pluto_channels) > 0, "Deveria carregar lista de canais da Pluto TV"
+            first_ch = pluto_channels[0]
+            assert "id" in first_ch
+            assert "name" in first_ch
+            assert "stream_url" in first_ch
+            assert ".m3u8" in first_ch["stream_url"]
+
+            # GET /api/pluto/channels
+            with urllib.request.urlopen(f"{base_url}/api/pluto/channels") as resp:
+                pluto_resp = json.loads(resp.read().decode("utf-8"))
+                assert "channels" in pluto_resp
+                assert "categories" in pluto_resp
+                assert len(pluto_resp["channels"]) > 0
+
+            # GET /api/pluto/channels?is_kids=1
+            with urllib.request.urlopen(f"{base_url}/api/pluto/channels?is_kids=1") as resp:
+                pluto_kids_resp = json.loads(resp.read().decode("utf-8"))
+                assert "channels" in pluto_kids_resp
+                assert len(pluto_kids_resp["channels"]) > 0
+
+            # GET /api/pluto/stream?id=...
+            with urllib.request.urlopen(f"{base_url}/api/pluto/stream?id={first_ch['id']}") as resp:
+                pluto_stream_resp = json.loads(resp.read().decode("utf-8"))
+                assert pluto_stream_resp["channel_id"] == first_ch["id"]
+                assert ".m3u8" in pluto_stream_resp["stream_url"]
+
             web_server.stop()
 
-        print("✓ Todos os componentes, streaming HTTP 206, metadados IMDb, diálogos, segurança e IndexWorker validados com sucesso!")
+        print("✓ Todos os componentes, streaming HTTP 206, metadados IMDb, integração Pluto TV, diálogos, segurança e IndexWorker validados com sucesso!")
     finally:
         try:
             if os.path.exists(ui_db_path):

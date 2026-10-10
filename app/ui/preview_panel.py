@@ -238,12 +238,42 @@ class PreviewPanel(QFrame):
         self.lbl_drive.setText(f"Origem / Unidade: {drive}")
         self.lbl_path.setText(f"Caminho:\n{file_path}")
 
+        self.btn_open.setText("🚀 Abrir Arquivo")
         self.btn_open.setEnabled(True)
-        self.btn_cast.setEnabled(cat in ("video", "audio"))
+        self.btn_cast.setEnabled(cat in ("video", "audio", "pluto") or file_data.get("is_live_stream", False))
         self.btn_explorer.setEnabled(True)
         self.btn_copy_path.setEnabled(True)
         self.btn_copy_folder.setEnabled(True)
         self.lbl_res.setVisible(False)
+
+        if cat == "pluto" or file_data.get("is_live_stream"):
+            ch_name = file_data.get("channel_name", name)
+            self.lbl_name.setText(ch_name)
+            ch_num = file_data.get("number")
+            self.lbl_size.setText(f"Canal Nº: {ch_num if ch_num else '-'}")
+            self.lbl_date.setText(f"Categoria: {file_data.get('pluto_category', 'Geral')}")
+            self.lbl_drive.setText("Origem: Pluto TV Streaming")
+            summary_txt = file_data.get("summary", "")
+            self.lbl_path.setText(f"Sinopse:\n{summary_txt}" if summary_txt else f"Stream:\n{file_path}")
+
+            self.btn_open.setText("▶️ Assistir Canal")
+            self.btn_open.setEnabled(True)
+            self.btn_cast.setEnabled(True)
+            self.btn_explorer.setEnabled(False)
+            self.btn_copy_folder.setEnabled(False)
+
+            self.text_preview.setVisible(False)
+            self.img_container.setVisible(True)
+            self.lbl_preview.setPixmap(QPixmap())
+            self.lbl_preview.setText(
+                f"<div style='text-align: center;'>"
+                f"<span style='font-size: 34px;'>🪐</span><br><br>"
+                f"<b style='font-size: 15px; color: #38BDF8;'>{ch_name}</b><br><br>"
+                f"<span style='background-color: #DC2626; color: #FFFFFF; font-weight: bold; font-size: 11px; padding: 3px 8px; border-radius: 4px;'>🔴 AO VIVO</span><br><br>"
+                f"<span style='color: #94A3B8; font-size: 11px;'>Pluto TV Brasil</span>"
+                f"</div>"
+            )
+            return
 
         text_extensions = {".txt", ".nfo", ".srt", ".vtt", ".sub", ".log", ".json", ".xml", ".ini", ".inf"}
         if ext in text_extensions:

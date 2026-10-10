@@ -14,6 +14,7 @@ from app.utils.system_ops import open_file, reveal_in_explorer
 
 CATEGORY_ICONS = {
     "video": "🎬",
+    "pluto": "🪐",
     "image": "🖼️",
     "audio": "🎵",
     "document": "📄",
@@ -201,32 +202,39 @@ class ResultsTableView(QTableWidget):
 
         if count == 1:
             f = selected_files[0]
-            act_open = menu.addAction("🚀 Abrir Arquivo")
+            is_live = f.get("is_live_stream", False) or f.get("category") == "pluto"
+
+            open_title = "▶️ Assistir Canal Ao Vivo" if is_live else "🚀 Abrir Arquivo"
+            act_open = menu.addAction(open_title)
             act_open.triggered.connect(lambda: open_file(f.get("path", "")))
 
-            if f.get("category") in ("video", "audio"):
+            if is_live or f.get("category") in ("video", "audio"):
                 act_cast = menu.addAction("📡 Transmitir para TV...")
                 act_cast.triggered.connect(lambda: self.cast_requested.emit(f.get("path", "")))
 
-            expl_label = "📂 Localizar no Windows Explorer" if sys.platform == "win32" else "📂 Localizar no Gerenciador de Arquivos"
-            act_explorer = menu.addAction(expl_label)
-            act_explorer.triggered.connect(lambda: reveal_in_explorer(f.get("path", "")))
+            if not is_live:
+                expl_label = "📂 Localizar no Windows Explorer" if sys.platform == "win32" else "📂 Localizar no Gerenciador de Arquivos"
+                act_explorer = menu.addAction(expl_label)
+                act_explorer.triggered.connect(lambda: reveal_in_explorer(f.get("path", "")))
 
             menu.addSeparator()
 
-            act_copy_path = menu.addAction("📋 Copiar Caminho Completo")
+            copy_path_label = "📋 Copiar URL do Stream" if is_live else "📋 Copiar Caminho Completo"
+            act_copy_path = menu.addAction(copy_path_label)
             act_copy_path.triggered.connect(lambda: QApplication.clipboard().setText(f.get("path", "")))
 
-            act_copy_name = menu.addAction("🏷️ Copiar Nome do Arquivo")
+            copy_name_label = "🏷️ Copiar Nome do Canal" if is_live else "🏷️ Copiar Nome do Arquivo"
+            act_copy_name = menu.addAction(copy_name_label)
             act_copy_name.triggered.connect(lambda: QApplication.clipboard().setText(f.get("name", "")))
 
-            act_copy_dir = menu.addAction("📁 Copiar Pasta do Arquivo")
-            act_copy_dir.triggered.connect(lambda: QApplication.clipboard().setText(f.get("parent_dir", "")))
+            if not is_live:
+                act_copy_dir = menu.addAction("📁 Copiar Pasta do Arquivo")
+                act_copy_dir.triggered.connect(lambda: QApplication.clipboard().setText(f.get("parent_dir", "")))
 
-            menu.addSeparator()
+                menu.addSeparator()
 
-            act_del = menu.addAction("🗑️ Mover para a Lixeira... (Delete)")
-            act_del.triggered.connect(lambda: self.delete_requested.emit(selected_files))
+                act_del = menu.addAction("🗑️ Mover para a Lixeira... (Delete)")
+                act_del.triggered.connect(lambda: self.delete_requested.emit(selected_files))
         else:
             act_open_all = menu.addAction(f"🚀 Abrir Selecionados ({count} arquivos)")
             act_open_all.triggered.connect(lambda: [open_file(sf.get("path", "")) for sf in selected_files])

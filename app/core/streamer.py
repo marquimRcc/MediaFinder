@@ -337,6 +337,33 @@ class RangeHTTPRequestHandler(BaseHTTPRequestHandler):
             self._send_json_response(prog or {}, 200, send_body)
             return
 
+        # GET /api/pluto/channels
+        if path == "/api/pluto/channels":
+            from app.core.pluto_tv import PlutoTVService
+            svc = PlutoTVService.get_instance()
+            is_kids_param = query_params.get("is_kids", ["0"])[0]
+            profile_id = query_params.get("profile", [""])[0]
+            is_kids = (is_kids_param == "1") or (profile_id == "kids")
+            cat = query_params.get("category", [None])[0]
+            channels = svc.get_channels(category=cat, is_kids=is_kids)
+            categories = svc.get_categories(is_kids=is_kids)
+            self._send_json_response({"channels": channels, "categories": categories}, 200, send_body)
+            return
+
+        # GET /api/pluto/stream?id=<channel_id>
+        if path == "/api/pluto/stream":
+            channel_id = query_params.get("id", [""])[0]
+            if not channel_id:
+                self._send_json_response({"error": "ID de canal ausente"}, 400, send_body)
+                return
+            from app.core.pluto_tv import PlutoTVService
+            svc = PlutoTVService.get_instance()
+            self._send_json_response({
+                "channel_id": channel_id,
+                "stream_url": svc.get_stream_url(channel_id)
+            }, 200, send_body)
+            return
+
         # GET /api/cast/devices
         if path == "/api/cast/devices":
             cast_mgr = TVCastManager.get_instance()
@@ -438,6 +465,18 @@ class RangeHTTPRequestHandler(BaseHTTPRequestHandler):
 
             if not device:
                 self._send_json_response({"success": False, "error": "Dispositivo TV não encontrado"}, 404)
+                return
+
+            channel_id = body.get("channel_id")
+            stream_url = body.get("stream_url")
+            channel_name = body.get("channel_name", "Pluto TV Ao Vivo")
+
+            if channel_id or stream_url:
+                from app.core.pluto_tv import PlutoTVService
+                svc = PlutoTVService.get_instance()
+                target_url = stream_url or svc.get_stream_url(channel_id)
+                cast_mgr.cast_stream(device, target_url, title=channel_name)
+                self._send_json_response({"success": True, "device": device.name, "live": True})
                 return
 
             with db._get_connection() as conn:
@@ -969,6 +1008,56 @@ class TVCastManager(QObject):
                 self.is_casting = False
                 logger.error(f"Erro ao transmitir para TV: {e}")
                 self.error_occurred.emit(f"Falha ao transmitir para a TV: {e}")
+
+        threading.Thread(target=_cast_thread, daemon=True).start()
+
+    def cast_stream(self, device: TVDevice, stream_url: str, title: str = "Pluto TV Ao Vivo"):
+        """Transmite um fluxo de rede ao vivo (HLS / m3u8) diretamente para o dispositivo Cast."""
+        def _cast_thread():
+            try:
+                self.active_cast_device = device
+                self._current_file_path = title
+                self.last_position = 0.0
+                self._current_media_url = stream_url
+
+                cast_device = device.raw_device
+                if cast_device is None:
+                    import pychromecast
+                    cast_device = pychromecast.get_chromecast_from_host(
+                        (device.host, 8009, None, None, None),
+                        timeout=5.0
+                    )
+                    device.raw_device = cast_device
+
+                cast_device.wait()
+                self.active_chromecast = cast_device
+
+                import pychromecast
+                if cast_device.app_id != pychromecast.APP_MEDIA_RECEIVER:
+                    try:
+                        cast_device.start_app(pychromecast.APP_MEDIA_RECEIVER)
+                        cast_device.wait()
+                        time.sleep(1.0)
+                    except Exception as app_err:
+                        logger.debug(f"Aviso ao iniciar APP_MEDIA_RECEIVER: {app_err}")
+
+                mc = cast_device.media_controller
+                mc.play_media(
+                    stream_url,
+                    content_type="application/x-mpegURL",
+                    title=title,
+                    stream_type="LIVE"
+                )
+                mc.block_until_active(timeout=8.0)
+
+                self.is_casting = True
+                self.cast_started.emit(device.name, title)
+                self._start_status_polling()
+
+            except Exception as e:
+                self.is_casting = False
+                logger.error(f"Erro ao transmitir stream para TV: {e}")
+                self.error_occurred.emit(f"Falha ao transmitir stream para a TV: {e}")
 
         threading.Thread(target=_cast_thread, daemon=True).start()
 

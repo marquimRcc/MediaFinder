@@ -39,6 +39,7 @@ class FilterBar(QWidget):
 
         self.CATEGORIES = [
             ("video", "🎬 Vídeos / Filmes"),
+            ("pluto", "🪐 Pluto TV"),
         ]
 
         self.btn_group = QButtonGroup(self)
@@ -49,7 +50,7 @@ class FilterBar(QWidget):
             btn = QPushButton(cat_label)
             btn.setProperty("class", "filter_chip")
             btn.setCheckable(True)
-            btn.setChecked(True)
+            btn.setChecked(cat_id == self.current_category)
             btn.clicked.connect(lambda checked=False, cid=cat_id: self._on_category_clicked(cid))
             self.btn_group.addButton(btn)
             self.chip_buttons[cat_id] = btn
@@ -98,10 +99,14 @@ class FilterBar(QWidget):
             if not btn:
                 continue
 
-            if cat_id == "all":
+            if cat_id == "pluto":
+                from app.core.pluto_tv import PlutoTVService
+                pluto_count = len(PlutoTVService.get_instance().get_channels())
+                count_str = format_count(pluto_count) if pluto_count > 0 else ""
+            elif cat_id == "all":
                 count_str = format_count(total_files) if total_files > 0 else ""
             else:
-                c = cat_counts.get(cat_id, 0)
+                c = cat_counts.get("video", 0)
                 count_str = format_count(c) if c > 0 else ""
 
             text = f"{cat_label} ({count_str})" if count_str else cat_label
