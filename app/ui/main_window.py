@@ -5,7 +5,7 @@ from typing import Optional, List, Dict, Any
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QLabel, QPushButton, QProgressBar, QStatusBar, QMessageBox, QApplication,
-    QMenu, QSystemTrayIcon, QStyle, QFrame
+    QMenu, QSystemTrayIcon, QStyle, QFrame, QStackedWidget
 )
 from PySide6.QtCore import Qt, QTimer, QSize, QPoint
 from PySide6.QtGui import QIcon, QKeySequence, QShortcut, QAction
@@ -16,6 +16,7 @@ from app.core.scanner import IndexWorker
 from app.ui.search_bar import SearchBar
 from app.ui.filter_bar import FilterBar
 from app.ui.results_view import ResultsTableView
+from app.ui.grid_view import MediaGridView
 from app.ui.preview_panel import PreviewPanel
 from app.ui.settings_dialog import SettingsDialog
 from app.ui.random_dialog import RandomMediaDialog
@@ -51,6 +52,7 @@ class MainWindow(QMainWindow):
         self._current_category = "video"
         self._current_drive = self.config.get("last_drive_filter", "all")
         self._current_sort = "name_asc"
+        self._current_view_mode = self.config.get("view_mode", "grid")
         self._preview_visible = self.config.get("preview_visible", True)
 
         self._init_ui()
@@ -129,6 +131,8 @@ class MainWindow(QMainWindow):
 
         self.filter_bar = FilterBar()
         self.filter_bar.filters_changed.connect(self._on_filters_changed)
+        self.filter_bar.view_mode_changed.connect(self._on_view_mode_changed)
+        self.filter_bar.set_view_mode(self._current_view_mode)
         main_layout.addWidget(self.filter_bar)
 
         # Banner de aviso quando nenhuma pasta estiver configurada
@@ -164,11 +168,22 @@ class MainWindow(QMainWindow):
 
         self.splitter.setChildrenCollapsible(True)
 
+        self.results_stack = QStackedWidget()
+
+        self.results_grid = MediaGridView()
+        self.results_grid.item_selected.connect(self._on_item_selected)
+        self.results_grid.delete_requested.connect(self._on_delete_files_requested)
+        self.results_grid.cast_requested.connect(self._open_cast_dialog)
+        self.results_stack.addWidget(self.results_grid)
+
         self.results_table = ResultsTableView()
         self.results_table.item_selected.connect(self._on_item_selected)
         self.results_table.delete_requested.connect(self._on_delete_files_requested)
         self.results_table.cast_requested.connect(self._open_cast_dialog)
-        self.splitter.addWidget(self.results_table)
+        self.results_stack.addWidget(self.results_table)
+
+        self.results_stack.setCurrentIndex(0 if self._current_view_mode == "grid" else 1)
+        self.splitter.addWidget(self.results_stack)
 
         self.preview_panel = PreviewPanel()
         self.preview_panel.close_requested.connect(lambda: self._toggle_preview_panel(False))
@@ -302,6 +317,7 @@ class MainWindow(QMainWindow):
         stats = self.db.get_stats()
         drives = list(stats.get("drives", {}).keys())
         self.filter_bar.set_available_drives(drives)
+        self.filter_bar.update_category_counts(stats)
 
     def _on_search_text_changed(self, query: str):
         self._current_query = query
@@ -324,11 +340,27 @@ class MainWindow(QMainWindow):
         self.btn_toggle_preview.setChecked(visible)
         self.config.set("preview_visible", visible)
 
+    def _on_view_mode_changed(self, mode: str):
+        self._current_view_mode = mode
+        self.config.set("view_mode", mode)
+        self.results_stack.setCurrentIndex(0 if mode == "grid" else 1)
+        sel = self._get_current_selected_file()
+        if sel:
+            self.preview_panel.set_file_data(sel)
+
+    def _get_current_selected_file(self) -> Optional[Dict[str, Any]]:
+        if self._current_view_mode == "grid":
+            return self.results_grid.get_selected_file()
+        return self.results_table.get_selected_file()
+
     def perform_search(self):
         if self._current_category == "pluto":
             from app.core.pluto_tv import PlutoTVService
             svc = PlutoTVService.get_instance()
             channels = svc.get_channels()
+            if self._current_drive and self._current_drive != "all":
+                channels = [c for c in channels if c.get("category") == self._current_drive]
+
             if self._current_query:
                 q = self._current_query.strip().lower()
                 channels = [
@@ -354,14 +386,17 @@ class MainWindow(QMainWindow):
                     "summary": ch.get("summary", ""),
                     "logo": ch.get("logo", ""),
                     "thumbnail": ch.get("thumbnail", ""),
+                    "poster_url": ch.get("logo") or ch.get("thumbnail", ""),
                     "number": ch.get("number", 0),
                     "parent_dir": f"Pluto TV Ao Vivo • {ch['category']}"
                 })
 
+            self.results_grid.set_results(pluto_items)
             self.results_table.set_results(pluto_items)
             query_desc = f' para "{self._current_query}"' if self._current_query else ""
+            cat_desc = f" [{self._current_drive}]" if (self._current_drive and self._current_drive != "all") else ""
             self.lbl_status_results.setText(
-                f"🪐 Pluto TV: {len(pluto_items)} canais ao vivo disponíveis{query_desc}"
+                f"🪐 Pluto TV{cat_desc}: {len(pluto_items)} canais ao vivo disponíveis{query_desc}"
             )
             if not pluto_items:
                 self.preview_panel.set_file_data(None)
@@ -369,6 +404,7 @@ class MainWindow(QMainWindow):
 
         folders = self.config.get_watched_folders()
         if not folders:
+            self.results_grid.set_results([])
             self.results_table.set_results([])
             self.lbl_status_results.setText("Nenhuma pasta configurada. Clique em '➕ Selecionar Pastas...' para começar.")
             self.preview_panel.set_file_data(None)
@@ -381,6 +417,7 @@ class MainWindow(QMainWindow):
             sort_by=self._current_sort,
             limit=1000
         )
+        self.results_grid.set_results(files)
         self.results_table.set_results(files)
 
         query_desc = f' para "{self._current_query}"' if self._current_query else ""
@@ -602,8 +639,10 @@ class MainWindow(QMainWindow):
         cat = self.config.get("random_mode_category", "video")
         item = None
 
-        if source == "current_results" and self.results_table.files_data:
-            item = random.choice(self.results_table.files_data)
+        if source == "current_results":
+            items = self.results_grid._current_results or self.results_table.files_data
+            if items:
+                item = random.choice(items)
         else:
             folders = self.config.get("random_mode_folders", [])
             categories = [cat] if cat and cat != "all" else None
@@ -644,7 +683,7 @@ class MainWindow(QMainWindow):
             return
 
         if title is None and is_stream:
-            sel = self.results_table.get_selected_file()
+            sel = self._get_current_selected_file()
             if sel and sel.get("path") == file_path:
                 title = sel.get("channel_name") or sel.get("name")
 

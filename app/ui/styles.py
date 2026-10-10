@@ -181,66 +181,47 @@ QComboBox QAbstractItemView {
 
 /* Tabela de Resultados */
 QTableWidget, QTableView {
-    background-color: #15181E;
+    background-color: #12161F;
+    alternate-background-color: #181E29;
     border: 1px solid #242A34;
     border-radius: 10px;
-    gridline-color: #1E232B;
-    color: #CBD5E1;
-    font-size: 13px;
-}
-QTableWidget::item, QTableView::item {
-    padding: 6px 10px;
-    border-bottom: 1px solid #1A1F27;
-}
-QTableWidget::item:selected, QTableView::item:selected {
-    background-color: #1E3A8A;
-    color: #FFFFFF;
-}
-QTableWidget::item:hover:!selected, QTableView::item:hover:!selected {
-    background-color: #1C222C;
-}
-
-/* Cabeçalho da Tabela - Sem cortes e com alinhamento perfeito */
-QHeaderView {
-    background-color: #181C23;
-    border: none;
-}
-QHeaderView::section {
-    background-color: #181C23;
-    color: #94A3B8;
-    padding: 8px 12px;
-    border: none;
-    border-bottom: 2px solid #2A323D;
-    border-right: 1px solid #1F242D;
-    font-weight: bold;
-    font-size: 12px;
-    text-align: left;
-}
-QHeaderView::section:hover {
-    background-color: #1E242D;
-    color: #38BDF8;
-}
-
-/* Tabela de Resultados */
-QTableWidget, QTableView {
-    background-color: #15181E;
-    border: 1px solid #242A34;
-    border-radius: 10px;
-    gridline-color: #1A1F27;
-    color: #CBD5E1;
+    gridline-color: #1C2330;
+    color: #F8FAFC;
     font-size: 13px;
     outline: none;
 }
 QTableWidget::item, QTableView::item {
     padding: 6px 10px;
-    border-bottom: 1px solid #181D24;
+    border-bottom: 1px solid #1A212D;
+    color: #F8FAFC;
 }
 QTableWidget::item:selected, QTableView::item:selected {
     background-color: #1E3A8A;
     color: #FFFFFF;
 }
 QTableWidget::item:hover:!selected, QTableView::item:hover:!selected {
-    background-color: #1C232E;
+    background-color: #1C2433;
+}
+
+/* Grade de Mídias e Canais (Cards View) */
+QListWidget#media_grid_view {
+    background-color: #0E1219;
+    border: 1px solid #202735;
+    border-radius: 10px;
+    padding: 8px;
+    outline: none;
+}
+QListWidget#media_grid_view::item {
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    padding: 2px;
+}
+QListWidget#media_grid_view::item:selected {
+    background: transparent;
+}
+QListWidget#media_grid_view::item:hover {
+    background: transparent;
 }
 
 /* Painel de Preview Lateral */

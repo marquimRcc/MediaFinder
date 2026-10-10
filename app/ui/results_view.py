@@ -97,6 +97,7 @@ class ResultsTableView(QTableWidget):
             item_type.setTextAlignment(Qt.AlignCenter)
 
             item_name = QTableWidgetItem(name)
+            item_name.setForeground(QColor("#FFFFFF"))
             item_name.setToolTip(f"📄 {name}\n📁 {path}\n💾 {format_file_size(size)} | 📅 {format_timestamp(mtime)}")
 
             item_ext = QTableWidgetItem(ext)

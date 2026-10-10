@@ -68,6 +68,9 @@
         <button class="pill active" data-category="video">🎬 Vídeos & Filmes</button>
         <button class="pill" data-category="pluto">🪐 Pluto TV</button>
       </div>
+      <div class="filter-pills pluto-pills" id="pluto-category-pills" style="display: none;">
+        <!-- Inserido dinamicamente com as categorias da Pluto TV -->
+      </div>
     </div>
 
     <!-- Hero Card: Continuar Assistindo -->
@@ -105,10 +108,15 @@
       </div>
     </section>
 
+    <!-- Container para Seções/Carrosséis por Categoria da Pluto TV -->
+    <div id="pluto-categories-container" style="display: none;">
+      <!-- Preenchido dinamicamente por categoria: Filmes, Séries, Infantil, etc. -->
+    </div>
+
     <!-- Seção: Catálogo Completo -->
-    <section>
+    <section id="catalog-section">
       <div class="section-title">
-        <span>Explorar Catálogo</span>
+        <span id="catalog-section-title">Explorar Catálogo</span>
       </div>
       <div class="carousel-row" id="catalog-grid" style="flex-wrap: wrap; overflow-x: visible;">
         <!-- Inserido dinamicamente -->

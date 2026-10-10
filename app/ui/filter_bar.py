@@ -9,12 +9,23 @@ from PySide6.QtCore import Signal, Qt
 class FilterBar(QWidget):
     """Barra de filtros por tipo de mídia, unidade/origem e ordenação responsiva."""
 
-    filters_changed = Signal(str, str, str)  # (categoria, drive, ordenacao)
+    filters_changed = Signal(str, str, str)  # (categoria, drive_ou_subcat, ordenacao)
+    view_mode_changed = Signal(str)          # ("grid" ou "table")
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.current_category = "all"
         self._init_ui()
+
+    def _populate_pluto_categories(self):
+        try:
+            from app.core.pluto_tv import PlutoTVService
+            cats = PlutoTVService.get_instance().get_categories()
+            for c in cats:
+                icon = "🎬 " if "Filmes" in c else ("📺 " if "Séries" in c else ("🦁 " if "Infantil" in c or "Nickelodeon" in c else ("⚡ " if "Anime" in c else "")))
+                self.combo_pluto_cat.addItem(f"{icon}{c}", c)
+        except Exception:
+            pass
 
     def _init_ui(self):
         main_layout = QHBoxLayout(self)
@@ -66,9 +77,18 @@ class FilterBar(QWidget):
         dropdowns_layout.setContentsMargins(0, 0, 0, 0)
         dropdowns_layout.setSpacing(6)
 
+        # Seletor de Categorias da Pluto TV
+        self.combo_pluto_cat = QComboBox()
+        self.combo_pluto_cat.addItem("🪐 Todas as Categorias", "all")
+        self._populate_pluto_categories()
+        self.combo_pluto_cat.currentIndexChanged.connect(self._emit_changes)
+        self.combo_pluto_cat.setVisible(self.current_category == "pluto")
+        dropdowns_layout.addWidget(self.combo_pluto_cat)
+
         self.combo_drive = QComboBox()
         self.combo_drive.addItem("Todas as Unidades", "all")
         self.combo_drive.currentIndexChanged.connect(self._emit_changes)
+        self.combo_drive.setVisible(self.current_category != "pluto")
         dropdowns_layout.addWidget(self.combo_drive)
 
         self.combo_sort = QComboBox()
@@ -79,6 +99,23 @@ class FilterBar(QWidget):
         self.combo_sort.addItem("Mais Recentes", "mtime_desc")
         self.combo_sort.currentIndexChanged.connect(self._emit_changes)
         dropdowns_layout.addWidget(self.combo_sort)
+
+        # Botões de alternância Grade / Lista
+        self.view_btn_group = QButtonGroup(self)
+        self.btn_view_grid = QPushButton("⊞ Grade")
+        self.btn_view_grid.setCheckable(True)
+        self.btn_view_grid.setChecked(True)
+        self.btn_view_grid.setToolTip("Visualização em Grade com miniaturas de filmes e canais")
+        self.btn_view_grid.clicked.connect(lambda: self.view_mode_changed.emit("grid"))
+        self.view_btn_group.addButton(self.btn_view_grid)
+        dropdowns_layout.addWidget(self.btn_view_grid)
+
+        self.btn_view_table = QPushButton("☰ Lista")
+        self.btn_view_table.setCheckable(True)
+        self.btn_view_table.setToolTip("Visualização clássica em lista/tabela detalhada")
+        self.btn_view_table.clicked.connect(lambda: self.view_mode_changed.emit("table"))
+        self.view_btn_group.addButton(self.btn_view_table)
+        dropdowns_layout.addWidget(self.btn_view_table)
 
         main_layout.addWidget(dropdowns_widget)
 
@@ -149,9 +186,24 @@ class FilterBar(QWidget):
 
     def _on_category_clicked(self, cat_id: str):
         self.current_category = cat_id
+        is_pluto = (cat_id == "pluto")
+        self.combo_pluto_cat.setVisible(is_pluto)
+        self.combo_drive.setVisible(not is_pluto)
         self._emit_changes()
 
+    def set_view_mode(self, mode: str):
+        """Seleciona programaticamente o modo de visualização (grade ou tabela)."""
+        self.view_btn_group.blockSignals(True)
+        if mode == "table":
+            self.btn_view_table.setChecked(True)
+        else:
+            self.btn_view_grid.setChecked(True)
+        self.view_btn_group.blockSignals(False)
+
     def _emit_changes(self):
-        drive = self.combo_drive.currentData() or "all"
+        if self.current_category == "pluto":
+            sub_filter = self.combo_pluto_cat.currentData() or "all"
+        else:
+            sub_filter = self.combo_drive.currentData() or "all"
         sort_by = self.combo_sort.currentData() or "name_asc"
-        self.filters_changed.emit(self.current_category, drive, sort_by)
+        self.filters_changed.emit(self.current_category, sub_filter, sort_by)

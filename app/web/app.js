@@ -15,6 +15,9 @@ const App = {
   progressInterval: null,
   currentPlayingFileId: null,
   selectedCategory: 'video',
+  selectedPlutoCategory: 'all',
+  cachedPlutoChannels: [],
+  cachedPlutoCategories: [],
   searchQuery: '',
 
   // Ícones de avatar
@@ -145,6 +148,9 @@ const App = {
 
   selectProfile(profile) {
     this.currentProfile = profile;
+    this.cachedPlutoChannels = [];
+    this.cachedPlutoCategories = [];
+    this.selectedPlutoCategory = 'all';
     localStorage.setItem('mf_profile_id', profile.id);
     if (profile.is_kids) {
       this.showScreen('kids');
@@ -300,6 +306,16 @@ const App = {
       return this.loadPlutoCatalog();
     }
 
+    const plutoContainer = document.getElementById('pluto-categories-container');
+    const plutoPills = document.getElementById('pluto-category-pills');
+    const catalogSection = document.getElementById('catalog-section');
+    const catalogTitle = document.getElementById('catalog-section-title');
+
+    if (plutoContainer) plutoContainer.style.display = 'none';
+    if (plutoPills) plutoPills.style.display = 'none';
+    if (catalogSection) catalogSection.style.display = 'block';
+    if (catalogTitle) catalogTitle.textContent = 'Explorar Catálogo';
+
     try {
       const isSearching = !!(this.searchQuery && this.searchQuery.trim());
       const heroSection = document.getElementById('hero-continue');
@@ -345,34 +361,99 @@ const App = {
     }
   },
 
+  getCategoryIcon(cat) {
+    if (!cat) return '📺';
+    const l = cat.toLowerCase();
+    if (l.includes('filme')) return '🎬';
+    if (l.includes('série') || l.includes('serie')) return '📺';
+    if (l.includes('infantil') || l.includes('nickelodeon') || l.includes('desenho') || l.includes('kids')) return '🦁';
+    if (l.includes('anime') || l.includes('geek')) return '⚡';
+    if (l.includes('investiga') || l.includes('crime') || l.includes('notícia') || l.includes('noticia')) return '🔍';
+    if (l.includes('comédia') || l.includes('comedia')) return '😂';
+    if (l.includes('estilo') || l.includes('vida') || l.includes('culinária') || l.includes('culinaria')) return '🍳';
+    if (l.includes('música') || l.includes('musica')) return '🎵';
+    if (l.includes('esporte')) return '⚽';
+    if (l.includes('reality')) return '🌟';
+    if (l.includes('document')) return '🌍';
+    return '🪐';
+  },
+
+  renderPlutoCategoryPills() {
+    const pillsContainer = document.getElementById('pluto-category-pills');
+    if (!pillsContainer) return;
+    pillsContainer.innerHTML = '';
+
+    const allBtn = document.createElement('button');
+    allBtn.className = `pill pluto-subpill ${this.selectedPlutoCategory === 'all' ? 'active' : ''}`;
+    allBtn.setAttribute('data-pluto-cat', 'all');
+    allBtn.textContent = '🪐 Todos os Canais';
+    allBtn.onclick = () => this.filterPlutoByCategory('all');
+    pillsContainer.appendChild(allBtn);
+
+    this.cachedPlutoCategories.forEach(cat => {
+      const btn = document.createElement('button');
+      btn.className = `pill pluto-subpill ${this.selectedPlutoCategory === cat ? 'active' : ''}`;
+      btn.setAttribute('data-pluto-cat', cat);
+      btn.textContent = `${this.getCategoryIcon(cat)} ${cat}`;
+      btn.onclick = () => this.filterPlutoByCategory(cat);
+      pillsContainer.appendChild(btn);
+    });
+  },
+
+  filterPlutoByCategory(cat) {
+    this.selectedPlutoCategory = cat;
+    document.querySelectorAll('#pluto-category-pills .pill').forEach(p => {
+      if (p.getAttribute('data-pluto-cat') === cat) {
+        p.classList.add('active');
+        p.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      } else {
+        p.classList.remove('active');
+      }
+    });
+    this.loadPlutoCatalog();
+  },
+
   async loadPlutoCatalog() {
     try {
       const isSearching = !!(this.searchQuery && this.searchQuery.trim());
       const heroSection = document.getElementById('hero-continue');
       const recentSection = document.getElementById('carousel-recent')?.closest('section');
+      const plutoContainer = document.getElementById('pluto-categories-container');
+      const plutoPills = document.getElementById('pluto-category-pills');
+      const catalogSection = document.getElementById('catalog-section');
+      const catalogTitle = document.getElementById('catalog-section-title');
 
       if (heroSection) heroSection.style.display = 'none';
       if (recentSection) recentSection.style.display = 'none';
+      if (plutoPills) plutoPills.style.display = 'flex';
 
-      const isKids = this.currentProfile && this.currentProfile.is_kids ? '1' : '0';
-      const res = await fetch(`/api/pluto/channels?profile=${this.currentProfile ? this.currentProfile.id : ''}&is_kids=${isKids}`);
-      const data = await res.json();
-      let channels = data.channels || [];
+      if (!this.cachedPlutoChannels.length) {
+        const isKids = this.currentProfile && this.currentProfile.is_kids ? '1' : '0';
+        const res = await fetch(`/api/pluto/channels?profile=${this.currentProfile ? this.currentProfile.id : ''}&is_kids=${isKids}`);
+        const data = await res.json();
+        this.cachedPlutoChannels = data.channels || [];
+        this.cachedPlutoCategories = data.categories || [];
+        this.renderPlutoCategoryPills();
+      }
+
+      let channels = this.cachedPlutoChannels;
 
       if (isSearching) {
+        if (plutoContainer) plutoContainer.style.display = 'none';
+        if (catalogSection) catalogSection.style.display = 'block';
+
         const q = this.searchQuery.trim().toLowerCase();
-        channels = channels.filter(c =>
+        const filtered = channels.filter(c =>
           (c.name && c.name.toLowerCase().includes(q)) ||
           (c.category && c.category.toLowerCase().includes(q)) ||
           (c.summary && c.summary.toLowerCase().includes(q))
         );
-      }
 
-      const container = document.getElementById('catalog-grid');
-      container.innerHTML = '';
+        if (catalogTitle) catalogTitle.textContent = `🪐 Pluto TV: ${filtered.length} canais para "${this.searchQuery}"`;
+        const container = document.getElementById('catalog-grid');
+        container.innerHTML = '';
 
-      if (channels.length === 0) {
-        if (isSearching) {
+        if (filtered.length === 0) {
           container.innerHTML = `
             <div class="search-empty-state">
               <div class="empty-icon">🪐</div>
@@ -382,15 +463,83 @@ const App = {
             </div>
           `;
           document.getElementById('btn-empty-clear')?.addEventListener('click', () => this.clearSearch());
-        } else {
-          container.innerHTML = '<div style="color: var(--text-muted); padding: 20px; text-align: center;">Nenhum canal Pluto TV disponível no momento.</div>';
+          return;
+        }
+
+        filtered.forEach(ch => {
+          container.appendChild(this.createPlutoCard(ch));
+        });
+        return;
+      }
+
+      // Se NÃO estiver buscando e a categoria for 'all' (Tela Inicial da Pluto TV):
+      // Exibe carrosséis temáticos por categoria!
+      if (this.selectedPlutoCategory === 'all') {
+        if (catalogSection) catalogSection.style.display = 'none';
+        if (plutoContainer) {
+          plutoContainer.style.display = 'block';
+          plutoContainer.innerHTML = '';
+
+          // Agrupa canais por categoria preservando a ordem das categorias
+          const grouped = {};
+          this.cachedPlutoCategories.forEach(cat => {
+            grouped[cat] = [];
+          });
+          channels.forEach(ch => {
+            const cat = ch.category || 'Geral';
+            if (!grouped[cat]) grouped[cat] = [];
+            grouped[cat].push(ch);
+          });
+
+          for (const [catName, catChannels] of Object.entries(grouped)) {
+            if (!catChannels || catChannels.length === 0) continue;
+
+            const sec = document.createElement('section');
+            sec.className = 'pluto-category-section';
+
+            const titleRow = document.createElement('div');
+            titleRow.className = 'section-title';
+
+            const titleSpan = document.createElement('span');
+            titleSpan.textContent = `${this.getCategoryIcon(catName)} ${catName} (${catChannels.length})`;
+
+            const seeAllBtn = document.createElement('button');
+            seeAllBtn.className = 'btn-see-all';
+            seeAllBtn.textContent = 'Ver todos ›';
+            seeAllBtn.onclick = () => this.filterPlutoByCategory(catName);
+
+            titleRow.appendChild(titleSpan);
+            titleRow.appendChild(seeAllBtn);
+
+            const row = document.createElement('div');
+            row.className = 'carousel-row';
+            catChannels.forEach(ch => {
+              row.appendChild(this.createPlutoCard(ch));
+            });
+
+            sec.appendChild(titleRow);
+            sec.appendChild(row);
+            plutoContainer.appendChild(sec);
+          }
         }
         return;
       }
 
-      channels.forEach(ch => {
+      // Se estiver filtrado por uma sub-categoria específica:
+      if (plutoContainer) plutoContainer.style.display = 'none';
+      if (catalogSection) catalogSection.style.display = 'block';
+
+      const filtered = channels.filter(c => (c.category || '').toLowerCase() === this.selectedPlutoCategory.toLowerCase());
+      if (catalogTitle) {
+        catalogTitle.textContent = `${this.getCategoryIcon(this.selectedPlutoCategory)} ${this.selectedPlutoCategory} (${filtered.length} canais ao vivo)`;
+      }
+
+      const container = document.getElementById('catalog-grid');
+      container.innerHTML = '';
+      filtered.forEach(ch => {
         container.appendChild(this.createPlutoCard(ch));
       });
+
     } catch (e) {
       console.error('Erro ao carregar canais Pluto TV:', e);
     }
@@ -1166,6 +1315,12 @@ const App = {
         document.querySelectorAll('#filter-pills .pill').forEach(p => p.classList.remove('active'));
         pill.classList.add('active');
         this.selectedCategory = pill.getAttribute('data-category');
+        const plutoPills = document.getElementById('pluto-category-pills');
+        if (this.selectedCategory === 'pluto') {
+          if (plutoPills) plutoPills.style.display = 'flex';
+        } else {
+          if (plutoPills) plutoPills.style.display = 'none';
+        }
         this.loadCatalog();
       };
     });

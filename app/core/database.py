@@ -342,8 +342,12 @@ class MediaDatabase:
             total_size = count_row["total_size"]
 
             data_query = f"""
-                SELECT f.id, f.name, f.path, f.parent_dir, f.extension, f.category, f.size, f.mtime, f.drive
+                SELECT 
+                    f.id, f.name, f.path, f.parent_dir, f.extension, f.category, f.size, f.mtime, f.drive,
+                    m.imdb_id, m.title as meta_title, m.original_title, m.year as meta_year,
+                    m.rating as imdb_rating, m.genre as meta_genre, m.poster_url, m.poster_local, m.backdrop_url
                 FROM files f
+                LEFT JOIN media_metadata m ON m.file_id = f.id
                 {where_sql}
                 ORDER BY {order_sql}
                 LIMIT ? OFFSET ?
