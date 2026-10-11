@@ -604,7 +604,8 @@ class MainWindow(QMainWindow):
             pass
 
     def _on_indexing_error(self, folder: str, err_msg: str):
-        pass
+        folder_name = os.path.basename(folder) if folder else "pasta"
+        self.lbl_scan_status.setText(f"Aviso ({folder_name}): {err_msg}")
 
     def _open_settings(self):
         dialog = SettingsDialog(self.config, self.db, default_tab=0, parent=self)

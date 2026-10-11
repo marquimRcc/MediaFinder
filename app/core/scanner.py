@@ -17,8 +17,21 @@ IGNORED_DIRS = {
     "proc", "sys", "dev", "run", "snap", "lost+found"
 }
 
-# Prefixos protegidos do Linux (sistemas de arquivos virtuais que causam loops ou I/O infinito)
-LINUX_PROTECTED_ROOTS = {"/proc", "/sys", "/dev", "/run"}
+def is_protected_linux_dir(path: str) -> bool:
+    """
+    Verifica se o caminho pertence a um diretório de sistema virtual do Linux (/proc, /sys, /dev, /run).
+    Importante: Permite explicitamente pontos de montagem de HDs externos e pendrives (/run/media, /media, /mnt).
+    """
+    if not path:
+        return False
+    norm = os.path.normpath(path)
+    # Pontos de montagem de mídias externas no Linux
+    if norm.startswith("/run/media") or norm.startswith("/media") or norm.startswith("/mnt"):
+        return False
+    for p in ("/proc", "/sys", "/dev", "/run"):
+        if norm == p or norm.startswith(p + "/"):
+            return True
+    return False
 
 class IndexWorker(QThread):
     """Thread em segundo plano para varredura e indexação ultra rápida de arquivos."""
@@ -78,7 +91,7 @@ class IndexWorker(QThread):
         """Varre recursivamente o diretório usando os.scandir."""
         norm_root = os.path.normpath(root_folder)
         # Proteção contra scan acidental de sistemas de arquivos virtuais do Linux
-        if any(norm_root == p or norm_root.startswith(p + "/") for p in LINUX_PROTECTED_ROOTS):
+        if is_protected_linux_dir(norm_root):
             self.error_occurred.emit(root_folder, "Diretório de sistema/virtual do Linux ignorado por segurança.")
             return 0
 
@@ -104,7 +117,7 @@ class IndexWorker(QThread):
                             # Ignora pastas de sistema/lixeira
                             if entry.is_dir(follow_symlinks=False):
                                 if entry.name.lower() not in IGNORED_DIRS and not entry.name.startswith("."):
-                                    if not any(entry.path == p or entry.path.startswith(p + "/") for p in LINUX_PROTECTED_ROOTS):
+                                    if not is_protected_linux_dir(entry.path):
                                         stack.append(entry.path)
                             elif entry.is_file(follow_symlinks=False):
                                 path_str = entry.path
