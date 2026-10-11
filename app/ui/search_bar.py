@@ -41,8 +41,8 @@ class SearchBar(QWidget):
         layout.addWidget(self.btn_history)
 
         # Botão de Reindexar / Atualizar
-        self.btn_reindex = QPushButton("🔄 Atualizar")
-        self.btn_reindex.setToolTip("Reescanear pastas configuradas")
+        self.btn_reindex = QPushButton("🔄 Reindexar (F5)")
+        self.btn_reindex.setToolTip("Reescanear pastas do disco agora (remove mídias excluídas e adiciona novos arquivos) [F5]")
         self.btn_reindex.clicked.connect(self.reindex_requested.emit)
         layout.addWidget(self.btn_reindex)
 

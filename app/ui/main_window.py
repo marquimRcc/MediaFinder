@@ -596,6 +596,13 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'search_bar') and hasattr(self.search_bar, 'btn_reindex'):
             self.search_bar.btn_reindex.setEnabled(True)
 
+        # Inicia enriquecedor em segundo plano para baixar capas e metadados de mídias novas
+        try:
+            from app.core.metadata import MediaMetadataService
+            MediaMetadataService.get_instance(self.db).start_background_enricher()
+        except Exception:
+            pass
+
     def _on_indexing_error(self, folder: str, err_msg: str):
         pass
 
