@@ -20,7 +20,7 @@ from app.utils.media_helpers import format_file_size, format_timestamp, resolve_
 
 class ImageLoaderThread(QThread):
     """Carrega miniaturas de imagens e pôsteres em segundo plano com proteções de segurança."""
-    image_loaded = Signal(str, QPixmap, str) # (path_or_url, pixmap, resolution_str)
+    image_loaded = Signal(str, QImage, str) # (path_or_url, image, resolution_str)
 
     def __init__(self, target: str, max_size: QSize, parent=None):
         super().__init__(parent)
@@ -29,6 +29,8 @@ class ImageLoaderThread(QThread):
 
     def run(self):
         try:
+            if self.isInterruptionRequested():
+                return
             import io
             import urllib.request
             img = None
@@ -47,6 +49,8 @@ class ImageLoaderThread(QThread):
                 return
 
             with img:
+                if self.isInterruptionRequested():
+                    return
                 orig_w, orig_h = img.size
                 res_str = f"{orig_w} × {orig_h} px"
                 
@@ -60,9 +64,9 @@ class ImageLoaderThread(QThread):
                 data = img.tobytes("raw", img.mode)
                 qformat = QImage.Format_RGBA8888 if img.mode == "RGBA" else QImage.Format_RGB888
                 qimg = QImage(data, img.width, img.height, img.width * (4 if img.mode == "RGBA" else 3), qformat)
-                pixmap = QPixmap.fromImage(qimg)
-                
-                self.image_loaded.emit(self.target, pixmap, res_str)
+                # Copia os pixels antes de sair da thread; QPixmap pertence à GUI.
+                if not self.isInterruptionRequested():
+                    self.image_loaded.emit(self.target, qimg.copy(), res_str)
         except (Image.DecompressionBombError, Image.DecompressionBombWarning):
             # Imagem excede os limites de segurança de memória
             pass
@@ -83,6 +87,10 @@ class PreviewPanel(QFrame):
         
         self.current_file_data: Optional[Dict[str, Any]] = None
         self._loader_thread: Optional[ImageLoaderThread] = None
+        self._pending_image = None
+        self._preview_target = None
+        self._closing = False
+        QApplication.instance().aboutToQuit.connect(self._shutdown_loader)
 
         self._init_ui()
 
@@ -232,6 +240,10 @@ class PreviewPanel(QFrame):
         layout.addLayout(actions_layout)
 
     def set_file_data(self, file_data: Optional[Dict[str, Any]]):
+        self._preview_target = None
+        self._pending_image = None
+        if self._loader_thread:
+            self._loader_thread.requestInterruption()
         self.current_file_data = file_data
 
         if not file_data:
@@ -284,11 +296,7 @@ class PreviewPanel(QFrame):
 
             if source_path:
                 self.lbl_preview.setText("Carregando logo...")
-                if self._loader_thread and self._loader_thread.isRunning():
-                    self._loader_thread.terminate()
-                self._loader_thread = ImageLoaderThread(source_path, QSize(260, 160), self)
-                self._loader_thread.image_loaded.connect(self._on_image_loaded)
-                self._loader_thread.start()
+                self._start_image_load(source_path, QSize(260, 160))
             else:
                 self.lbl_preview.setPixmap(QPixmap())
                 self.lbl_preview.setText(
@@ -321,13 +329,8 @@ class PreviewPanel(QFrame):
 
         if cat == "image":
             self.lbl_preview.setText("Carregando miniatura...")
-            if self._loader_thread and self._loader_thread.isRunning():
-                self._loader_thread.terminate()
-            
             target_img = source_path or file_path
-            self._loader_thread = ImageLoaderThread(target_img, QSize(300, 200), self)
-            self._loader_thread.image_loaded.connect(self._on_image_loaded)
-            self._loader_thread.start()
+            self._start_image_load(target_img, QSize(300, 200))
         elif cat == "video":
             meta_title = file_data.get("meta_title")
             meta_year = file_data.get("meta_year")
@@ -344,11 +347,7 @@ class PreviewPanel(QFrame):
 
             if source_path:
                 self.lbl_preview.setText("Carregando pôster...")
-                if self._loader_thread and self._loader_thread.isRunning():
-                    self._loader_thread.terminate()
-                self._loader_thread = ImageLoaderThread(source_path, QSize(260, 200), self)
-                self._loader_thread.image_loaded.connect(self._on_image_loaded)
-                self._loader_thread.start()
+                self._start_image_load(source_path, QSize(260, 200))
             else:
                 self.lbl_preview.setPixmap(QPixmap())
                 self.lbl_preview.setText(
@@ -376,8 +375,44 @@ class PreviewPanel(QFrame):
                 f"</div>"
             )
 
-    def _on_image_loaded(self, path_or_url: str, pixmap: QPixmap, res_str: str):
+    def _start_image_load(self, target: str, size: QSize):
+        if self._closing:
+            return
+        self._preview_target = target
+        if self._loader_thread is not None:
+            # Mantém apenas a seleção mais recente, sem matar uma thread Python.
+            self._pending_image = (target, size)
+            self._loader_thread.requestInterruption()
+            return
+        self._loader_thread = ImageLoaderThread(target, size, self)
+        self._loader_thread.image_loaded.connect(self._on_image_loaded)
+        self._loader_thread.finished.connect(self._on_loader_finished)
+        self._loader_thread.start()
+
+    def _on_loader_finished(self):
+        loader = self._loader_thread
+        self._loader_thread = None
+        if loader is not None:
+            loader.deleteLater()
+        pending = self._pending_image
+        self._pending_image = None
+        if pending is not None and not self._closing:
+            self._start_image_load(*pending)
+
+    def _shutdown_loader(self):
+        self._closing = True
+        self._pending_image = None
+        if self._loader_thread is not None:
+            self._loader_thread.requestInterruption()
+            self._loader_thread.wait()
+
+    def _on_image_loaded(self, path_or_url: str, image: QImage, res_str: str):
         """Slot chamado quando o carregamento da imagem em segundo plano termina."""
+        if (self._closing or path_or_url != self._preview_target
+                or self.sender() is not self._loader_thread
+                or self._loader_thread.isInterruptionRequested()):
+            return
+        pixmap = QPixmap.fromImage(image)
         if not pixmap.isNull():
             self.lbl_preview.setText("")
             self.lbl_preview.setPixmap(pixmap)
