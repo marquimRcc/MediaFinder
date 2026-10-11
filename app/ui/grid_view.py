@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal, QSize, QRect, QRectF, QObject
 from PySide6.QtGui import (
     QPainter, QColor, QFont, QPen, QBrush, QPixmap, QImage,
-    QPainterPath, QKeyEvent, QFontMetrics
+    QPainterPath, QKeyEvent, QFontMetrics, QImageReader
 )
 
 from app.utils.system_ops import open_file, reveal_in_explorer
@@ -36,13 +36,62 @@ class MediaCardDelegate(QStyledItemDelegate):
         self._loading_keys = set()
         self._executor = ThreadPoolExecutor(max_workers=6)
         self.signal_bridge = ImageFetchSignal()
-        self.signal_bridge.loaded.connect(self._on_image_loaded)
+        self.signal_bridge.loaded.connect(self._on_image_loaded, Qt.QueuedConnection)
 
     def _on_image_loaded(self, key: str, qimg: QImage):
         if not qimg.isNull():
             self.pixmap_cache[key] = QPixmap.fromImage(qimg)
-            if self.parent():
-                self.parent().viewport().update()
+            parent = self.parent()
+            if parent and hasattr(parent, "viewport"):
+                parent.viewport().update()
+
+    def _get_or_load_pixmap(self, cache_key: str, img_src: str, is_remote: bool, file_id: Optional[int] = None) -> Optional[QPixmap]:
+        """Retorna o pôster imediatamente se for local ou submete para download se for remoto."""
+        if not img_src:
+            return None
+
+        # 1. Verifica cache em memória
+        cached = self.pixmap_cache.get(cache_key)
+        if cached and not cached.isNull():
+            return cached
+
+        # 2. Se for arquivo local no disco, decodifica imediatamente
+        if not is_remote and os.path.isfile(img_src):
+            try:
+                reader = QImageReader(img_src)
+                reader.setAutoTransform(True)
+                orig = reader.size()
+                if orig.isValid():
+                    reader.setScaledSize(orig.scaled(self.CARD_WIDTH * 2, self.POSTER_HEIGHT * 2, Qt.KeepAspectRatio))
+                qimg = reader.read()
+                if qimg.isNull():
+                    # Fallback via Pillow caso o leitor Qt falhe
+                    from PIL import Image
+                    with Image.open(img_src) as im:
+                        im.thumbnail((self.CARD_WIDTH * 2, self.POSTER_HEIGHT * 2), Image.Resampling.LANCZOS)
+                        if im.mode not in ("RGB", "RGBA"):
+                            im = im.convert("RGBA")
+                        data = im.tobytes("raw", im.mode)
+                        fmt = QImage.Format_RGBA8888 if im.mode == "RGBA" else QImage.Format_RGB888
+                        qimg = QImage(data, im.width, im.height, im.width * (4 if im.mode == "RGBA" else 3), fmt).copy()
+
+                if not qimg.isNull():
+                    scaled_pix = QPixmap.fromImage(qimg).scaled(
+                        self.CARD_WIDTH - 8,
+                        self.POSTER_HEIGHT,
+                        Qt.KeepAspectRatioByExpanding,
+                        Qt.SmoothTransformation
+                    )
+                    self.pixmap_cache[cache_key] = scaled_pix
+                    return scaled_pix
+            except Exception:
+                pass
+
+        # 3. Se for remoto (logos da Pluto TV), busca via threadpool
+        if is_remote and img_src:
+            self._load_image_async(cache_key, img_src, is_remote, file_id)
+
+        return None
 
     def _load_image_async(self, key: str, url_or_path: str, is_remote: bool = False, file_id: Optional[int] = None):
         if key in self.pixmap_cache or key in self._loading_keys:
@@ -76,14 +125,6 @@ class MediaCardDelegate(QStyledItemDelegate):
                             data = im.tobytes("raw", im.mode)
                             fmt = QImage.Format_RGBA8888 if im.mode == "RGBA" else QImage.Format_RGB888
                             qimg = QImage(data, im.width, im.height, im.width * (4 if im.mode == "RGBA" else 3), fmt).copy()
-                elif os.path.isfile(url_or_path):
-                    with Image.open(url_or_path) as im:
-                        im.thumbnail((self.CARD_WIDTH * 2, self.POSTER_HEIGHT * 2), Image.Resampling.LANCZOS)
-                        if im.mode not in ("RGB", "RGBA"):
-                            im = im.convert("RGBA")
-                        data = im.tobytes("raw", im.mode)
-                        fmt = QImage.Format_RGBA8888 if im.mode == "RGBA" else QImage.Format_RGB888
-                        qimg = QImage(data, im.width, im.height, im.width * (4 if im.mode == "RGBA" else 3), fmt).copy()
 
                 if qimg and not qimg.isNull():
                     scaled = qimg.scaled(
@@ -141,16 +182,13 @@ class MediaCardDelegate(QStyledItemDelegate):
         is_live = data.get("is_live_stream", False) or data.get("category") == "pluto"
 
         cache_key = img_src or str(data.get("id", ""))
-        pixmap = self.pixmap_cache.get(cache_key)
+        pixmap = self._get_or_load_pixmap(cache_key, img_src, is_remote, data.get("id"))
 
         if pixmap and not pixmap.isNull():
             dx = poster_rect.x() + (poster_rect.width() - pixmap.width()) // 2
             dy = poster_rect.y() + (poster_rect.height() - pixmap.height()) // 2
             painter.drawPixmap(dx, dy, pixmap)
         else:
-            if img_src:
-                self._load_image_async(cache_key, img_src, is_remote, data.get("id"))
-
             icon_char = "🪐" if is_live else ("🎬" if data.get("category") == "video" else ("🖼️" if data.get("category") == "image" else "📄"))
             fallback_font = QFont(painter.font())
             fallback_font.setPointSize(22)
