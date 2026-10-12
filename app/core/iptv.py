@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 import json
 import time
 import logging
@@ -14,13 +15,13 @@ logger = logging.getLogger("mediafinder.iptv")
 IPTV_SOURCES: List[Dict[str, Any]] = [
     {
         "id": "github_br",
-        "name": "🇧🇷 GitHub iptv-org (Brasil - ~290 canais)",
+        "name": "🇧🇷 GitHub iptv-org (Brasil - ~270 canais únicos)",
         "desc": "Emissoras abertas, esportes, notícias e entretenimento de todo o Brasil (sem duplicar Pluto TV)",
         "url": "https://iptv-org.github.io/iptv/countries/br.m3u",
     },
     {
         "id": "github_movies",
-        "name": "🎬 GitHub iptv-org (Filmes 24h - ~550 canais)",
+        "name": "🎬 GitHub iptv-org (Filmes 24h - ~460 canais únicos)",
         "desc": "Transmissões contínuas de longas-metragens e cinema",
         "url": "https://iptv-org.github.io/iptv/categories/movies.m3u",
     },
@@ -414,12 +415,100 @@ class IPTVService:
             or "pluto" in il
         )
 
+    @staticmethod
+    def get_channel_quality_score(ch: Dict[str, Any]) -> int:
+        """Calcula pontuação de qualidade/resolução do canal para priorizar versões HD e de melhor sinal."""
+        name = (ch.get("name") or "").lower()
+        cid = (ch.get("id") or "").lower()
+        url = (ch.get("stream_url") or "").lower()
+        score = 500
+
+        # 1. Resolução explícita
+        if re.search(r"\b(2160p|4k)\b", name) or "4k" in cid:
+            score = 2160
+        elif re.search(r"\b1080p?\b", name) or "@fhd" in cid or "/1080" in url or "_1080" in url or "1080p" in url:
+            score = 1080
+        elif re.search(r"\b720p?\b", name) or "@hd" in cid or "/720" in url or "_720" in url or "720p" in url or re.search(r"\bhd\b", name):
+            score = 720
+        elif re.search(r"\b(576p|540p)\b", name):
+            score = 540
+        elif re.search(r"\b(480p|sd)\b", name) or "@sd" in cid:
+            score = 480
+        elif re.search(r"\b360p\b", name):
+            score = 360
+        elif re.search(r"\b240p\b", name):
+            score = 240
+
+        # 2. Penalidades para streams restritos
+        if "geo-blocked" in name:
+            score -= 200
+        if "not 24/7" in name:
+            score -= 100
+
+        # 3. Preferência secundária para HTTPS e presença de logotipo
+        if url.startswith("https://"):
+            score += 10
+        if ch.get("logo"):
+            score += 5
+
+        return score
+
+    @classmethod
+    def get_canonical_channel_key(cls, ch: Dict[str, Any]) -> str:
+        """Extrai a identidade canônica do canal para agrupar variantes repetidoras e resoluções."""
+        name = (ch.get("name") or "").strip()
+        clean = re.sub(r"\((1080p|720p|480p|360p|240p|576p|540p|2160p|4k|sd|hd)\)", "", name, flags=re.IGNORECASE)
+        clean = re.sub(r"\[.*?\]", "", clean)
+        clean = re.sub(r"\(brazil|\(brasil|\(português|\(portuguese\)", "", clean, flags=re.IGNORECASE)
+        clean = re.sub(r"\s+", " ", clean).strip()
+        cl = clean.lower()
+
+        # Principais redes nacionais com repetidoras regionais
+        if "globo" in cl and not any(x in cl for x in ["globonews", "globo news", "novelas", "globo rural", "globo esporte"]):
+            return "rede_globo"
+        if ("record" in cl or "recordtv" in cl) and not ("news" in cl):
+            return "record_tv"
+        if "sbt" in cl and not any(x in cl for x in ["news", "kids", "sports"]):
+            return "sbt_nacional"
+        if ("band" in cl or "bandeirantes" in cl) and not any(x in cl for x in ["news", "sports", "agro"]):
+            return "band_nacional"
+        if "cultura" in cl and not any(x in cl for x in ["para", "maranhao", "educativa", "vale"]):
+            return "tv_cultura"
+        if re.search(r"\b(redetv|rede\s+tv)\b", cl) and not any(x in cl for x in ["mais", "parana"]):
+            return "redetv"
+
+        # Se possuir ID limpo sem sufixo de qualidade
+        cid = (ch.get("id") or "").split("@")[0].lower()
+        if cid and not cid.startswith("iptv_") and not cid.startswith("fast_"):
+            return cid
+
+        return re.sub(r"[^\w\s]", "", cl).strip()
+
+    @classmethod
+    def deduplicate_channels(cls, channels: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Remove canais duplicados mantendo sempre a versão com maior resolução/qualidade (HD prioritário)."""
+        from collections import defaultdict
+        groups = defaultdict(list)
+        for ch in channels:
+            key = cls.get_canonical_channel_key(ch)
+            groups[key].append(ch)
+
+        deduped = []
+        for key, ch_list in groups.items():
+            if len(ch_list) > 1:
+                ch_list.sort(key=cls.get_channel_quality_score, reverse=True)
+                deduped.append(ch_list[0])
+            else:
+                deduped.append(ch_list[0])
+        return deduped
+
     def get_channels(self, category: Optional[str] = None, query: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Retorna os canais da lista ativa filtrados por categoria e termo de pesquisa (excluindo Pluto TV)."""
+        """Retorna os canais da lista ativa filtrados e desduplicados (HD preferido, sem Pluto TV)."""
         result = [
             c for c in self._channels
             if not self.is_pluto_tv_channel(c.get("name", ""), c.get("stream_url", ""), c.get("id", ""))
         ]
+        result = self.deduplicate_channels(result)
 
         if category and category.lower() not in ("all", "todos", "todas"):
             cat_clean = category.strip().lower()
@@ -439,9 +528,10 @@ class IPTVService:
         return result
 
     def get_categories(self) -> List[str]:
-        """Retorna lista única e ordenada das categorias dos canais ativos."""
+        """Retorna lista única e ordenada das categorias dos canais ativos desduplicados."""
         cats = set()
-        for ch in self._channels:
+        deduped = self.deduplicate_channels(self._channels)
+        for ch in deduped:
             if self.is_pluto_tv_channel(ch.get("name", ""), ch.get("stream_url", ""), ch.get("id", "")):
                 continue
             cat = ch.get("category")
@@ -464,7 +554,7 @@ class IPTVService:
         return first[:1].upper() + first[1:]
 
     def parse_m3u_content(self, m3u_text: str, default_source: str = "Geral", exclude_pluto: bool = True) -> List[Dict[str, Any]]:
-        """Parser robusto e otimizado para listas M3U e M3UPlus."""
+        """Parser robusto e otimizado para listas M3U e M3UPlus com deduplicação automática."""
         channels: List[Dict[str, Any]] = []
         current_meta: Dict[str, Any] = {}
 
@@ -508,7 +598,7 @@ class IPTVService:
                     })
                     current_meta = {}
 
-        return channels
+        return self.deduplicate_channels(channels)
 
     def _parse_extinf_line(self, line: str) -> Dict[str, Any]:
         """Extrai tags chave-valor e título da linha #EXTINF."""
