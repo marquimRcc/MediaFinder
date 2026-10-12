@@ -106,12 +106,12 @@ class FilterBar(QWidget):
         dropdowns_layout.setContentsMargins(0, 0, 0, 0)
         dropdowns_layout.setSpacing(6)
 
-        # Seletor de Categorias da Pluto TV
+        # Seletor de Categorias da Pluto TV (substituído pela Sidebar na Opção 4)
         self.combo_pluto_cat = QComboBox()
         self.combo_pluto_cat.addItem("🪐 Todas as Categorias", "all")
         self._populate_pluto_categories()
         self.combo_pluto_cat.currentIndexChanged.connect(self._emit_changes)
-        self.combo_pluto_cat.setVisible(self.current_category == "pluto")
+        self.combo_pluto_cat.setVisible(False)
         dropdowns_layout.addWidget(self.combo_pluto_cat)
 
         # Seletor de Lista / Fonte IPTV (GitHub Brasil, Filmes 24h, FAST, Customizada)
@@ -290,12 +290,20 @@ class FilterBar(QWidget):
         self.current_category = cat_id
         is_pluto = (cat_id == "pluto")
         is_iptv = (cat_id == "iptv")
-        self.combo_pluto_cat.setVisible(is_pluto)
+        self.combo_pluto_cat.setVisible(False)
         self.combo_iptv_source.setVisible(is_iptv)
         self.btn_iptv_config.setVisible(is_iptv)
         self.combo_iptv_cat.setVisible(is_iptv)
         self.combo_drive.setVisible(not is_pluto and not is_iptv)
         self._emit_changes()
+
+    def set_pluto_category(self, cat_id: str):
+        """Atualiza a categoria selecionada da Pluto TV para manter sincronia."""
+        idx = self.combo_pluto_cat.findData(cat_id)
+        if idx >= 0:
+            self.combo_pluto_cat.blockSignals(True)
+            self.combo_pluto_cat.setCurrentIndex(idx)
+            self.combo_pluto_cat.blockSignals(False)
 
     def set_view_mode(self, mode: str):
         """Seleciona programaticamente o modo de visualização (grade ou tabela)."""

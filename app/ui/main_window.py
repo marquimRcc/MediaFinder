@@ -18,6 +18,7 @@ from app.ui.filter_bar import FilterBar
 from app.ui.results_view import ResultsTableView
 from app.ui.grid_view import MediaGridView
 from app.ui.preview_panel import PreviewPanel
+from app.ui.category_sidebar import CategorySidebar
 from app.ui.settings_dialog import SettingsDialog
 from app.ui.random_dialog import RandomMediaDialog
 from app.ui.tv_mode_window import TVModeWindow
@@ -165,9 +166,15 @@ class MainWindow(QMainWindow):
 
         self.splitter = QSplitter(Qt.Horizontal)
         self.splitter.setHandleWidth(6)
-
         self.splitter.setChildrenCollapsible(True)
 
+        # 1. Barra lateral de categorias (Opção 4 - Pluto TV)
+        self.category_sidebar = CategorySidebar()
+        self.category_sidebar.category_selected.connect(self._on_sidebar_category_selected)
+        self.category_sidebar.setVisible(False)
+        self.splitter.addWidget(self.category_sidebar)
+
+        # 2. Área principal de resultados (Grade / Tabela)
         self.results_stack = QStackedWidget()
 
         self.results_grid = MediaGridView()
@@ -185,15 +192,18 @@ class MainWindow(QMainWindow):
         self.results_stack.setCurrentIndex(0 if self._current_view_mode == "grid" else 1)
         self.splitter.addWidget(self.results_stack)
 
+        # 3. Painel de prévia lateral
         self.preview_panel = PreviewPanel()
         self.preview_panel.close_requested.connect(lambda: self._toggle_preview_panel(False))
         self.preview_panel.cast_requested.connect(self._open_cast_dialog)
         self.splitter.addWidget(self.preview_panel)
 
         self.splitter.setCollapsible(0, False)
-        self.splitter.setCollapsible(1, True)
-        self.splitter.setStretchFactor(0, 3)
-        self.splitter.setStretchFactor(1, 1)
+        self.splitter.setCollapsible(1, False)
+        self.splitter.setCollapsible(2, True)
+        self.splitter.setStretchFactor(0, 0)
+        self.splitter.setStretchFactor(1, 4)
+        self.splitter.setStretchFactor(2, 1)
         self.preview_panel.setVisible(self._preview_visible)
         main_layout.addWidget(self.splitter, 1)
 
@@ -306,6 +316,7 @@ class MainWindow(QMainWindow):
         self._update_drives_list()
         self.filter_bar.set_category(self._current_category)
         self.filter_bar.set_drive(self._current_drive)
+        self.category_sidebar.setVisible(self._current_category == "pluto")
         self.search_bar.set_text(self._current_query)
         self.perform_search()
 
@@ -325,10 +336,28 @@ class MainWindow(QMainWindow):
         self.config.set("last_search_query", query)
         self.perform_search()
 
+    def _on_sidebar_category_selected(self, cat_id: str):
+        """Disparado quando o usuário clica em uma categoria na barra lateral da Pluto TV."""
+        self._current_drive = cat_id
+        self.config.set("last_drive_filter", cat_id)
+        if hasattr(self.filter_bar, "set_pluto_category"):
+            self.filter_bar.set_pluto_category(cat_id)
+        self.perform_search()
+
     def _on_filters_changed(self, category: str, drive: str, sort_by: str):
         self._current_category = category
         self._current_drive = drive
         self._current_sort = sort_by
+
+        is_pluto = (category == "pluto")
+        self.category_sidebar.setVisible(is_pluto)
+        if is_pluto:
+            sizes = self.splitter.sizes()
+            if sizes and sizes[0] < 200:
+                sizes[0] = 230
+                if len(sizes) > 1:
+                    sizes[1] = max(200, sizes[1] - 230)
+                self.splitter.setSizes(sizes)
 
         self.config.set("last_category_filter", category)
         self.config.set("last_drive_filter", drive)
@@ -410,7 +439,14 @@ class MainWindow(QMainWindow):
         if self._current_category == "pluto":
             from app.core.pluto_tv import PlutoTVService
             svc = PlutoTVService.get_instance()
-            channels = svc.get_channels()
+            all_channels = svc.get_channels()
+
+            # Popula ou sincroniza a barra lateral de categorias (Opção 4)
+            if not self.category_sidebar._item_widgets:
+                self.category_sidebar.load_pluto_categories(all_channels)
+            self.category_sidebar.select_category(self._current_drive or "all", emit_signal=False)
+
+            channels = all_channels
             if self._current_drive and self._current_drive != "all":
                 channels = [c for c in channels if c.get("category") == self._current_drive]
 
