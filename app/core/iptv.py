@@ -14,13 +14,13 @@ logger = logging.getLogger("mediafinder.iptv")
 IPTV_SOURCES: List[Dict[str, Any]] = [
     {
         "id": "github_br",
-        "name": "🇧🇷 GitHub iptv-org (Brasil - ~400 canais)",
-        "desc": "Emissoras abertas, esportes, notícias e entretenimento de todo o Brasil",
+        "name": "🇧🇷 GitHub iptv-org (Brasil - ~290 canais)",
+        "desc": "Emissoras abertas, esportes, notícias e entretenimento de todo o Brasil (sem duplicar Pluto TV)",
         "url": "https://iptv-org.github.io/iptv/countries/br.m3u",
     },
     {
         "id": "github_movies",
-        "name": "🎬 GitHub iptv-org (Filmes 24h - ~780 canais)",
+        "name": "🎬 GitHub iptv-org (Filmes 24h - ~550 canais)",
         "desc": "Transmissões contínuas de longas-metragens e cinema",
         "url": "https://iptv-org.github.io/iptv/categories/movies.m3u",
     },
@@ -330,7 +330,10 @@ class IPTVService:
                 with open(cache_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 if isinstance(data, list) and len(data) > 0:
-                    self._channels = data
+                    self._channels = [
+                        c for c in data
+                        if not self.is_pluto_tv_channel(c.get("name", ""), c.get("stream_url", ""), c.get("id", ""))
+                    ]
                     logger.info(f"IPTVService: {len(self._channels)} canais carregados do cache para {source_id}.")
                     return
             except Exception as e:
@@ -397,9 +400,26 @@ class IPTVService:
         self.set_active_source(self._active_source_id, force_refresh=True)
         return len(self._channels)
 
+    @staticmethod
+    def is_pluto_tv_channel(name: str, stream_url: str, ch_id: str = "") -> bool:
+        """Identifica se o canal pertence à Pluto TV para evitar duplicidade na aba IPTV."""
+        nl = (name or "").lower()
+        ul = (stream_url or "").lower()
+        il = (ch_id or "").lower()
+        return (
+            "pluto" in nl
+            or "pluto.tv" in ul
+            or "plutotv" in ul
+            or "jmp2.uk/plu-" in ul
+            or "pluto" in il
+        )
+
     def get_channels(self, category: Optional[str] = None, query: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Retorna os canais da lista ativa filtrados por categoria e termo de pesquisa."""
-        result = list(self._channels)
+        """Retorna os canais da lista ativa filtrados por categoria e termo de pesquisa (excluindo Pluto TV)."""
+        result = [
+            c for c in self._channels
+            if not self.is_pluto_tv_channel(c.get("name", ""), c.get("stream_url", ""), c.get("id", ""))
+        ]
 
         if category and category.lower() not in ("all", "todos", "todas"):
             cat_clean = category.strip().lower()
@@ -422,6 +442,8 @@ class IPTVService:
         """Retorna lista única e ordenada das categorias dos canais ativos."""
         cats = set()
         for ch in self._channels:
+            if self.is_pluto_tv_channel(ch.get("name", ""), ch.get("stream_url", ""), ch.get("id", "")):
+                continue
             cat = ch.get("category")
             if cat:
                 cats.add(cat.strip())
@@ -441,7 +463,7 @@ class IPTVService:
         first = parts[0]
         return first[:1].upper() + first[1:]
 
-    def parse_m3u_content(self, m3u_text: str, default_source: str = "Geral") -> List[Dict[str, Any]]:
+    def parse_m3u_content(self, m3u_text: str, default_source: str = "Geral", exclude_pluto: bool = True) -> List[Dict[str, Any]]:
         """Parser robusto e otimizado para listas M3U e M3UPlus."""
         channels: List[Dict[str, Any]] = []
         current_meta: Dict[str, Any] = {}
@@ -458,6 +480,12 @@ class IPTVService:
                     stream_url = line
                     ch_id = current_meta.get("tvg-id") or f"iptv_{len(channels)+1}_{int(time.time())}"
                     raw_name = current_meta.get("title") or current_meta.get("tvg-name") or f"Canal {len(channels)+1}"
+
+                    # Exclui canais pertencentes à Pluto TV
+                    if exclude_pluto and self.is_pluto_tv_channel(raw_name, stream_url, ch_id):
+                        current_meta = {}
+                        continue
+
                     logo = current_meta.get("tvg-logo") or ""
                     raw_group = current_meta.get("group-title") or default_source
                     group = self.normalize_category(raw_group, default=default_source)
