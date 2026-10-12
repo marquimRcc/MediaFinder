@@ -107,15 +107,12 @@ def resolve_poster_source(data: dict) -> tuple:
 
     posters_dir = get_posters_dir()
 
-    # 1. Pôster salvo em disco pelo ID do arquivo
+    # 1. Pôster salvo em disco pelo ID do arquivo (numérico ou alfanumérico como pluto_xxx/iptv_xxx)
     file_id = data.get("id") or data.get("file_id")
     if file_id is not None:
-        try:
-            cand = posters_dir / f"{int(file_id)}.jpg"
-            if cand.is_file() and cand.stat().st_size > 0:
-                return str(cand), False
-        except (ValueError, TypeError):
-            pass
+        cand = posters_dir / f"{file_id}.jpg"
+        if cand.is_file() and cand.stat().st_size > 0:
+            return str(cand), False
 
     # 2. poster_local (rota /api/media/{id}/poster ou caminho absoluto)
     poster_local = data.get("poster_local")
@@ -134,8 +131,8 @@ def resolve_poster_source(data: dict) -> tuple:
         if img_path and os.path.isfile(img_path) and os.path.getsize(img_path) > 0:
             return img_path, False
 
-    # 4. URLs remotas ou caminhos específicos (poster_url, logo, thumbnail, backdrop_url)
-    for key in ("poster_url", "logo", "thumbnail", "backdrop_url"):
+    # 4. URLs remotas ou caminhos específicos (prioridade para thumbnail e poster_url antes de logo)
+    for key in ("poster_url", "thumbnail", "featured_image", "logo", "backdrop_url"):
         val = data.get(key)
         if val and isinstance(val, str):
             val_clean = val.strip()

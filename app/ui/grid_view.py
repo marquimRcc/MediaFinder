@@ -76,10 +76,12 @@ class MediaCardDelegate(QStyledItemDelegate):
                         qimg = QImage(data, im.width, im.height, im.width * (4 if im.mode == "RGBA" else 3), fmt).copy()
 
                 if not qimg.isNull():
+                    aspect = qimg.width() / max(1, qimg.height())
+                    mode = Qt.KeepAspectRatio if aspect > 1.15 else Qt.KeepAspectRatioByExpanding
                     scaled_pix = QPixmap.fromImage(qimg).scaled(
                         self.CARD_WIDTH - 8,
                         self.POSTER_HEIGHT,
-                        Qt.KeepAspectRatioByExpanding,
+                        mode,
                         Qt.SmoothTransformation
                     )
                     self.pixmap_cache[cache_key] = scaled_pix
@@ -127,10 +129,12 @@ class MediaCardDelegate(QStyledItemDelegate):
                             qimg = QImage(data, im.width, im.height, im.width * (4 if im.mode == "RGBA" else 3), fmt).copy()
 
                 if qimg and not qimg.isNull():
+                    aspect = qimg.width() / max(1, qimg.height())
+                    mode = Qt.KeepAspectRatio if aspect > 1.15 else Qt.KeepAspectRatioByExpanding
                     scaled = qimg.scaled(
                         self.CARD_WIDTH - 8,
                         self.POSTER_HEIGHT,
-                        Qt.KeepAspectRatioByExpanding,
+                        mode,
                         Qt.SmoothTransformation
                     )
                     self.signal_bridge.loaded.emit(key, scaled)

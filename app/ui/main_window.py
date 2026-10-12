@@ -439,7 +439,7 @@ class MainWindow(QMainWindow):
                     "summary": ch.get("summary", ""),
                     "logo": ch.get("logo", ""),
                     "thumbnail": ch.get("thumbnail", ""),
-                    "poster_url": ch.get("logo") or ch.get("thumbnail", ""),
+                    "poster_url": ch.get("thumbnail") or ch.get("featured_image") or ch.get("logo", ""),
                     "number": ch.get("number", 0),
                     "parent_dir": f"Pluto TV Ao Vivo • {ch['category']}"
                 })
