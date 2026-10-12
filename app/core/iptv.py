@@ -15,7 +15,7 @@ logger = logging.getLogger("mediafinder.iptv")
 IPTV_SOURCES: List[Dict[str, Any]] = [
     {
         "id": "github_br",
-        "name": "🇧🇷 GitHub iptv-org (Brasil - ~270 canais únicos)",
+        "name": "🇧🇷 GitHub iptv-org (Brasil - ~260 canais únicos)",
         "desc": "Emissoras abertas, esportes, notícias e entretenimento de todo o Brasil (sem duplicar Pluto TV)",
         "url": "https://iptv-org.github.io/iptv/countries/br.m3u",
     },
@@ -192,12 +192,47 @@ CATEGORY_TRANSLATION_MAP = {
     "other": "Outros"
 }
 
+# Cidades, capitais, estados e termos regionais para desduplicação profunda
+CITIES_AND_REGIONS = set([
+    # Estados e siglas
+    "acre", "ac", "alagoas", "al", "amapa", "ap", "amazonas", "am", "bahia", "ba",
+    "ceara", "ce", "distrito federal", "df", "brasilia", "espirito santo", "es",
+    "goias", "go", "maranhao", "ma", "mato grosso", "mt", "mato grosso do sul", "ms",
+    "minas gerais", "minas", "mg", "para", "pa", "paraiba", "pb", "parana", "pr",
+    "pernambuco", "pe", "piaui", "pi", "rio de janeiro", "rj", "rio",
+    "rio grande do norte", "rn", "rio grande do sul", "rs", "rondonia", "ro",
+    "roraima", "rr", "santa catarina", "sc", "sao paulo", "sp", "sergipe", "se", "tocantins", "to",
+    # Capitais e grandes cidades
+    "aracaju", "belem", "belo horizonte", "boa vista", "campo grande", "cuiaba", "curitiba",
+    "florianopolis", "fortaleza", "goiania", "joao pessoa", "macapa", "maceio", "manaus",
+    "natal", "palmas", "porto alegre", "porto", "alegre", "porto velho", "recife", "rio branco", "salvador",
+    "sao luis", "teresina", "vitoria",
+    # Cidades do interior e polos regionais
+    "campinas", "santos", "sorocaba", "ribeirao preto", "sao jose dos campos", "sao jose do rio preto",
+    "uberlandia", "juiz de fora", "montes claros", "governador valadares", "ipatinga", "uberaba",
+    "londrina", "maringa", "ponta grossa", "cascavel", "foz do iguacu", "joinville", "blumenau",
+    "caxias do sul", "pelotas", "santa maria", "petropolis", "niteroi", "campos dos goytacazes",
+    "nova friburgo", "volta redonda", "marica", "cabo frio", "angra dos reis",
+    "anapolis", "rio verde", "itumbiara", "jatai", "dourados", "rondonopolis", "sinop",
+    "feira de santana", "vitoria da conquista", "itabuna", "ilheus", "juazeiro", "petrolina",
+    "caruaru", "campina grande", "mossoro", "sobral", "juazeiro do norte", "imperatriz",
+    "caxias", "parnaiba", "santarem", "maraba", "parauapebas", "castanhal", "ji parana",
+    "cachoeiro", "cachoeiro de itapemirim", "sao mateus", "mateus", "colatina", "linhares", "guarapari",
+    "jundiai", "piracicaba", "bauru", "franca", "taubate", "limeira", "araras", "rio claro",
+    "aracatuba", "marilia", "presidente prudente", "sao carlos", "araraquara", "birigui",
+    "passo fundo", "pelotas", "bage", "uruguaiana", "chapeco", "criciuma", "itajaí", "brusque",
+    "oeste", "leste", "norte", "sul", "interior", "capital", "litoral", "metropolitana", "vale",
+    "central", "centro", "nacional", "regional", "noroeste", "sudoeste", "nordeste", "sudeste"
+])
+
+GENERIC_PREFIXES = {"tv", "canal", "rede", "radio"}
+
 
 class IPTVService:
     """
     Serviço central de canais FAST e IPTV ao vivo.
-    Fornece catálogo multi-fontes (GitHub da comunidade e listas customizadas M3U),
-    com parser resiliente e cache local persistente por fonte.
+    Fornece catálogo multi-fontes com parser resiliente, desduplicação profunda por cidade
+    e cache local persistente por fonte.
     """
 
     _instance = None
@@ -331,10 +366,11 @@ class IPTVService:
                 with open(cache_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 if isinstance(data, list) and len(data) > 0:
-                    self._channels = [
+                    filtered_data = [
                         c for c in data
                         if not self.is_pluto_tv_channel(c.get("name", ""), c.get("stream_url", ""), c.get("id", ""))
                     ]
+                    self._channels = self.deduplicate_channels(filtered_data)
                     logger.info(f"IPTVService: {len(self._channels)} canais carregados do cache para {source_id}.")
                     return
             except Exception as e:
@@ -352,7 +388,6 @@ class IPTVService:
                 ok, count, _ = self.set_custom_source(self._custom_url_or_path, self._custom_name)
                 if ok:
                     return
-            # Se não houver custom configurada ainda, usa os FAST essenciais como fallback
             self._channels = list(DEFAULT_FAST_CHANNELS)
             return
 
@@ -381,7 +416,8 @@ class IPTVService:
         if cache_file.exists():
             try:
                 with open(cache_file, "r", encoding="utf-8") as f:
-                    self._channels = json.load(f)
+                    cached_list = json.load(f)
+                    self._channels = self.deduplicate_channels(cached_list)
                     return
             except Exception:
                 pass
@@ -423,29 +459,36 @@ class IPTVService:
         url = (ch.get("stream_url") or "").lower()
         score = 500
 
-        # 1. Resolução explícita
-        if re.search(r"\b(2160p|4k)\b", name) or "4k" in cid:
-            score = 2160
-        elif re.search(r"\b1080p?\b", name) or "@fhd" in cid or "/1080" in url or "_1080" in url or "1080p" in url:
-            score = 1080
-        elif re.search(r"\b720p?\b", name) or "@hd" in cid or "/720" in url or "_720" in url or "720p" in url or re.search(r"\bhd\b", name):
-            score = 720
-        elif re.search(r"\b(576p|540p)\b", name):
-            score = 540
-        elif re.search(r"\b(480p|sd)\b", name) or "@sd" in cid:
-            score = 480
-        elif re.search(r"\b360p\b", name):
-            score = 360
-        elif re.search(r"\b240p\b", name):
-            score = 240
+        # Resolução numérica explícita (ex: 1080p, 720p, 480p, 360p, 320p, etc.)
+        match_res = re.search(r"\b(\d+)[pi]?\b", name)
+        if match_res:
+            val = int(match_res.group(1))
+            if val in (2160, 1080, 720, 576, 540, 480, 360, 320, 240):
+                score = val
 
-        # 2. Penalidades para streams restritos
+        # Termos em nome, id ou url
+        if re.search(r"\b(2160p|4k)\b", name) or "4k" in cid:
+            score = max(score, 2160)
+        elif re.search(r"\b1080p?\b", name) or "@fhd" in cid or "/1080" in url or "_1080" in url:
+            score = max(score, 1080)
+        elif re.search(r"\b720p?\b", name) or "@hd" in cid or "/720" in url or "_720" in url or re.search(r"\bhd\b", name):
+            score = max(score, 720)
+        elif re.search(r"\b(576p|540p)\b", name):
+            score = max(score, 540)
+        elif re.search(r"\b(480p|sd)\b", name) or "@sd" in cid:
+            score = max(score, 480)
+
+        # Penalidades para streams instáveis ou restritos
         if "geo-blocked" in name:
             score -= 200
         if "not 24/7" in name:
             score -= 100
 
-        # 3. Preferência secundária para HTTPS e presença de logotipo
+        # Prioridade para transmissões nacionais/oficiais em relação a repetidoras de cidades
+        if re.search(r"\b(nacional|oficial|master|brasil|rede)\b", name):
+            score += 30
+
+        # Preferência secundária para HTTPS e presença de logotipo
         if url.startswith("https://"):
             score += 10
         if ch.get("logo"):
@@ -455,15 +498,17 @@ class IPTVService:
 
     @classmethod
     def get_canonical_channel_key(cls, ch: Dict[str, Any]) -> str:
-        """Extrai a identidade canônica do canal para agrupar variantes repetidoras e resoluções."""
+        """Extrai a identidade canônica do canal removendo sufixos de cidade, estado e resolução."""
         name = (ch.get("name") or "").strip()
-        clean = re.sub(r"\((1080p|720p|480p|360p|240p|576p|540p|2160p|4k|sd|hd)\)", "", name, flags=re.IGNORECASE)
+        # Remove sufixos de resolução
+        clean = re.sub(r"\(\s*\d+\s*[pi]?\s*\)", "", name, flags=re.IGNORECASE)
+        clean = re.sub(r"\((?:2160p|1080p|720p|480p|360p|240p|4k|sd|hd|fhd|1080i|576i|480i)\)", "", clean, flags=re.IGNORECASE)
         clean = re.sub(r"\[.*?\]", "", clean)
         clean = re.sub(r"\(brazil|\(brasil|\(português|\(portuguese\)", "", clean, flags=re.IGNORECASE)
         clean = re.sub(r"\s+", " ", clean).strip()
         cl = clean.lower()
 
-        # Principais redes nacionais com repetidoras regionais
+        # Principais redes nacionais e marcas consolidadas com afiliadas/cidades
         if "globo" in cl and not any(x in cl for x in ["globonews", "globo news", "novelas", "globo rural", "globo esporte"]):
             return "rede_globo"
         if ("record" in cl or "recordtv" in cl) and not ("news" in cl):
@@ -472,12 +517,52 @@ class IPTVService:
             return "sbt_nacional"
         if ("band" in cl or "bandeirantes" in cl) and not any(x in cl for x in ["news", "sports", "agro"]):
             return "band_nacional"
-        if "cultura" in cl and not any(x in cl for x in ["para", "maranhao", "educativa", "vale"]):
+        if "cultura" in cl and not any(x in cl for x in ["educativa", "maranhao"]):
             return "tv_cultura"
-        if re.search(r"\b(redetv|rede\s+tv)\b", cl) and not any(x in cl for x in ["mais", "parana"]):
+        if re.search(r"\b(redetv|rede\s+tv)\b", cl):
             return "redetv"
+        if re.search(r"\b(rede\s+cnt|cnt)\b", cl):
+            return "rede_cnt"
+        if re.search(r"\b(tv\s+brasil)\b", cl) and not any(x in cl for x in ["conectv", "rctv", "natal"]):
+            return "tv_brasil"
+        if re.search(r"\b(tv\s+camara|camara)\b", cl) and not any(x in cl for x in ["deputados"]):
+            return "tv_camara"
+        if re.search(r"\b(tv\s+assembleia|assembleia)\b", cl):
+            return "tv_assembleia"
+        if re.search(r"\b(tve)\b", cl):
+            return "tve"
+        if re.search(r"\b(tv\s+sim)\b", cl):
+            return "tv_sim"
+        if re.search(r"\b(tv\s+cidade\s+verde)\b", cl):
+            return "tv_cidade_verde"
+        if re.search(r"\b(tv\s+diario)\b", cl):
+            return "tv_diario"
+        if re.search(r"\b(tv\s+difusora)\b", cl):
+            return "tv_difusora"
+        if re.search(r"\b(catve)\b", cl):
+            return "catve"
+        if re.search(r"\b(tv\s+birigui|birigui)\b", cl):
+            return "tv_birigui"
+        if re.search(r"\b(unitv)\b", cl):
+            return "unitv"
+        if re.search(r"\b(tv\s+petropolis)\b", cl) or ("petropolis" in cl and "tv" in cl):
+            return "tv_petropolis"
+        if re.search(r"\b(tv\s+sul)\b", cl):
+            return "tv_sul"
 
-        # Se possuir ID limpo sem sufixo de qualidade
+        # Regra profunda para variantes com nome de cidade/estado/região no final
+        words = [w for w in re.split(r"[^\w]+", cl) if w]
+        stripped = list(words)
+        while stripped and (stripped[-1] in CITIES_AND_REGIONS or stripped[-1] in {"de", "do", "da", "dos", "das"}):
+            stripped.pop()
+
+        if len(stripped) == 1 and stripped[0] in GENERIC_PREFIXES:
+            return "_".join(words)
+
+        if stripped:
+            return "_".join(stripped)
+
+        # Se possuir ID tvg-id sem sufixo de qualidade
         cid = (ch.get("id") or "").split("@")[0].lower()
         if cid and not cid.startswith("iptv_") and not cid.startswith("fast_"):
             return cid
@@ -610,8 +695,7 @@ class IPTVService:
         else:
             tags_part = line[8:].strip()
 
-        import re
-        pattern = re.compile(r'([\w-]+)="([^"]*)"')
+        pattern = re.compile(r"([\w-]+)=\"([^\"]*)\"")
         for match in pattern.finditer(tags_part):
             key = match.group(1).lower()
             val = match.group(2)
