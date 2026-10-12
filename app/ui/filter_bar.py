@@ -13,18 +13,14 @@ class FilterBar(QWidget):
     view_mode_changed = Signal(str)          # ("grid" ou "table")
 
     CATEGORIES = [
-        ("all", "✦ Todas as Mídias"),
         ("video", "🎬 Filmes"),
-        ("audio", "🎵 Músicas"),
-        ("image", "🖼️ Imagens"),
-        ("document", "📄 Documentos"),
         ("pluto", "🪐 Pluto TV"),
         ("iptv", "📺 Canais FAST"),
     ]
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.current_category = "all"
+        self.current_category = "video"
         self._init_ui()
 
     def _populate_pluto_categories(self):
@@ -247,10 +243,11 @@ class FilterBar(QWidget):
                 channels = IPTVService.get_instance().get_channels()
                 iptv_count = len(channels)
                 count_str = format_count(iptv_count) if iptv_count > 0 else ""
-            elif cat_id == "all":
-                count_str = format_count(total_files) if total_files > 0 else ""
-            else:
+            elif cat_id == "video":
                 c = cat_counts.get("video", 0)
+                count_str = format_count(c) if c > 0 else ""
+            else:
+                c = cat_counts.get(cat_id, 0)
                 count_str = format_count(c) if c > 0 else ""
 
             text = f"{cat_label} ({count_str})" if count_str else cat_label
