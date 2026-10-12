@@ -397,8 +397,11 @@ class MainWindow(QMainWindow):
             self.results_table.set_results(iptv_items)
             query_desc = f' para "{self._current_query}"' if self._current_query else ""
             cat_desc = f" [{self._current_drive}]" if (self._current_drive and self._current_drive != "all") else ""
+            active_src_id = svc.get_active_source()
+            src_info = next((s for s in svc.get_sources() if s["id"] == active_src_id), None)
+            src_name = src_info["name"] if src_info else "Canais FAST"
             self.lbl_status_results.setText(
-                f"📺 Canais FAST{cat_desc}: {len(iptv_items)} emissoras e canais ao vivo{query_desc}"
+                f"📺 {src_name}{cat_desc}: {len(iptv_items)} canais ao vivo{query_desc}"
             )
             if not iptv_items:
                 self.preview_panel.set_file_data(None)

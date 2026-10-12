@@ -498,28 +498,52 @@ def run_tests():
 
             web_server.stop()
 
-        # Validação do IPTVService e canais FAST
+        # Validação do IPTVService e canais FAST / Multi-fontes
         from app.core.iptv import IPTVService
         iptv_svc = IPTVService.get_instance()
         iptv_channels = iptv_svc.get_channels()
         iptv_categories = iptv_svc.get_categories()
-        assert len(iptv_channels) >= 5, "Deveria ter carregado canais FAST padrão"
-        assert len(iptv_categories) >= 3, "Deveria ter categorias de canais FAST"
+        assert len(iptv_channels) >= 5, "Deveria ter carregado canais de IPTV"
+        assert len(iptv_categories) >= 3, "Deveria ter categorias de canais"
+
+        # Teste de alternância para FAST essenciais
+        fast_chans = iptv_svc.set_active_source("fast_essentials")
+        assert len(fast_chans) == 12, "Deveria conter os 12 canais FAST essenciais"
         filtered_news = iptv_svc.get_channels(category="Notícias")
         assert any("Record News" in c["name"] for c in filtered_news), "Deveria conter Record News em Notícias"
 
-        # Teste do parser M3U
+        # Teste do parser M3U e fonte customizada com arquivo temporário
         sample_m3u = """#EXTM3U
-#EXTINF:-1 tvg-id="teste1" tvg-name="Canal Teste" tvg-logo="http://logo.png" group-title="Testes",Canal Teste
-https://exemplo.com/live.m3u8
+#EXTINF:-1 tvg-id="teste1" tvg-name="Canal Teste" tvg-logo="http://logo.png" group-title="Movies",Canal Teste Filmes
+https://exemplo.com/filme.m3u8
+#EXTINF:-1 tvg-id="teste2" tvg-name="Canal HBO Teste" group-title="Entertainment",HBO Simulado
+https://exemplo.com/hbo.m3u8
 """
-        parsed = iptv_svc.parse_m3u_content(sample_m3u)
-        assert len(parsed) == 1
-        assert parsed[0]["name"] == "Canal Teste"
-        assert parsed[0]["category"] == "Testes"
-        assert parsed[0]["stream_url"] == "https://exemplo.com/live.m3u8"
+        with tempfile.NamedTemporaryFile("w", suffix=".m3u", delete=False, encoding="utf-8") as tf:
+            tf.write(sample_m3u)
+            temp_m3u_path = tf.name
 
-        print("✓ Todos os componentes, streaming HTTP 206, metadados IMDb, Pluto TV, IPTV FAST, diálogos e IndexWorker validados com sucesso!")
+        try:
+            ok, count, msg = iptv_svc.set_custom_source(temp_m3u_path, "Lista Custom Teste")
+            assert ok is True, f"Falha ao carregar lista customizada: {msg}"
+            assert count == 2, f"Deveria ter 2 canais carregados, obteve {count}"
+            custom_chans = iptv_svc.set_active_source("custom")
+            assert len(custom_chans) == 2
+            assert any("HBO Simulado" in c["name"] for c in custom_chans)
+        finally:
+            if os.path.exists(temp_m3u_path):
+                os.remove(temp_m3u_path)
+
+        # Restaura para GitHub Brasil
+        iptv_svc.set_active_source("github_br")
+
+        # Teste do diálogo de importação M3U
+        from app.ui.iptv_dialog import ImportM3UDialog
+        dlg_iptv = ImportM3UDialog()
+        assert dlg_iptv is not None
+        dlg_iptv.close()
+
+        print("✓ Todos os componentes, streaming HTTP 206, metadados IMDb, Pluto TV, IPTV Multi-fontes M3U, diálogos e IndexWorker validados com sucesso!")
     finally:
         try:
             if os.path.exists(ui_db_path):

@@ -12,6 +12,16 @@ class FilterBar(QWidget):
     filters_changed = Signal(str, str, str)  # (categoria, drive_ou_subcat, ordenacao)
     view_mode_changed = Signal(str)          # ("grid" ou "table")
 
+    CATEGORIES = [
+        ("all", "✦ Todas as Mídias"),
+        ("video", "🎬 Filmes"),
+        ("audio", "🎵 Músicas"),
+        ("image", "🖼️ Imagens"),
+        ("document", "📄 Documentos"),
+        ("pluto", "🪐 Pluto TV"),
+        ("iptv", "📺 Canais FAST"),
+    ]
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.current_category = "all"
@@ -27,15 +37,35 @@ class FilterBar(QWidget):
         except Exception:
             pass
 
+    def _populate_iptv_sources(self):
+        self.combo_iptv_source.blockSignals(True)
+        self.combo_iptv_source.clear()
+        try:
+            from app.core.iptv import IPTVService
+            svc = IPTVService.get_instance()
+            active = svc.get_active_source()
+            for src in svc.get_sources():
+                self.combo_iptv_source.addItem(src["name"], src["id"])
+            idx = self.combo_iptv_source.findData(active)
+            if idx >= 0:
+                self.combo_iptv_source.setCurrentIndex(idx)
+        except Exception:
+            pass
+        self.combo_iptv_source.blockSignals(False)
+
     def _populate_iptv_categories(self):
+        self.combo_iptv_cat.blockSignals(True)
+        self.combo_iptv_cat.clear()
+        self.combo_iptv_cat.addItem("📺 Todas as Categorias", "all")
         try:
             from app.core.iptv import IPTVService
             cats = IPTVService.get_instance().get_categories()
             for c in cats:
-                icon = "🎬 " if "Filmes" in c else ("📺 " if "Séries" in c else ("📰 " if "Notícias" in c else ("🎭 " if "Cultura" in c else "")))
+                icon = "🎬 " if "Filmes" in c else ("📺 " if "Séries" in c else ("📰 " if "Notícias" in c else ("🎭 " if "Cultura" in c else ("⚽ " if "Esportes" in c else ("🧸 " if "Infantil" in c else "")))))
                 self.combo_iptv_cat.addItem(f"{icon}{c}", c)
         except Exception:
             pass
+        self.combo_iptv_cat.blockSignals(False)
 
     def _init_ui(self):
         main_layout = QHBoxLayout(self)
@@ -47,22 +77,14 @@ class FilterBar(QWidget):
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll_area.setFrameShape(QFrame.NoFrame)
-        scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         scroll_area.setStyleSheet("background: transparent;")
+        scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         chips_container = QWidget()
         chips_container.setStyleSheet("background: transparent;")
         chips_layout = QHBoxLayout(chips_container)
         chips_layout.setContentsMargins(0, 0, 0, 0)
         chips_layout.setSpacing(6)
-
-        self.current_category = "video"
-
-        self.CATEGORIES = [
-            ("video", "🎬 Vídeos / Filmes"),
-            ("pluto", "🪐 Pluto TV"),
-            ("iptv", "📺 Canais FAST"),
-        ]
 
         self.btn_group = QButtonGroup(self)
         self.btn_group.setExclusive(True)
@@ -96,8 +118,27 @@ class FilterBar(QWidget):
         self.combo_pluto_cat.setVisible(self.current_category == "pluto")
         dropdowns_layout.addWidget(self.combo_pluto_cat)
 
+        # Seletor de Lista / Fonte IPTV (GitHub Brasil, Filmes 24h, FAST, Customizada)
+        self.combo_iptv_source = QComboBox()
+        self.combo_iptv_source.setMaximumWidth(230)
+        self.combo_iptv_source.setToolTip("Selecione a playlist de canais: Comunidade GitHub, Filmes ou Lista Própria")
+        self._populate_iptv_sources()
+        self.combo_iptv_source.currentIndexChanged.connect(self._on_iptv_source_changed)
+        self.combo_iptv_source.setVisible(self.current_category == "iptv")
+        dropdowns_layout.addWidget(self.combo_iptv_source)
+
+        # Botão para importar ou gerenciar lista M3U customizada
+        self.btn_iptv_config = QPushButton("⚙️ Lista")
+        self.btn_iptv_config.setMaximumWidth(75)
+        self.btn_iptv_config.setToolTip("Configurar lista M3U personalizada (URL externa ou arquivo local)")
+        self.btn_iptv_config.setStyleSheet("padding: 4px 8px; font-weight: bold;")
+        self.btn_iptv_config.clicked.connect(self._open_iptv_dialog)
+        self.btn_iptv_config.setVisible(self.current_category == "iptv")
+        dropdowns_layout.addWidget(self.btn_iptv_config)
+
         # Seletor de Categorias de Canais FAST / IPTV
         self.combo_iptv_cat = QComboBox()
+        self.combo_iptv_cat.setMaximumWidth(170)
         self.combo_iptv_cat.addItem("📺 Todas as Categorias", "all")
         self._populate_iptv_categories()
         self.combo_iptv_cat.currentIndexChanged.connect(self._emit_changes)
@@ -137,6 +178,47 @@ class FilterBar(QWidget):
         dropdowns_layout.addWidget(self.btn_view_table)
 
         main_layout.addWidget(dropdowns_widget)
+
+    def _on_iptv_source_changed(self):
+        src_id = self.combo_iptv_source.currentData()
+        if not src_id:
+            return
+        from app.core.iptv import IPTVService
+        svc = IPTVService.get_instance()
+        if src_id == "custom":
+            url, _ = svc.get_custom_config()
+            if not url:
+                self._open_iptv_dialog()
+                return
+
+        svc.set_active_source(src_id)
+        self._populate_iptv_categories()
+        self._update_iptv_chip()
+        self._emit_changes()
+
+    def _open_iptv_dialog(self):
+        from app.ui.iptv_dialog import ImportM3UDialog
+        dlg = ImportM3UDialog(self.window())
+        dlg.playlist_updated.connect(self._on_playlist_imported)
+        dlg.exec()
+
+    def _on_playlist_imported(self, source_id: str):
+        self._populate_iptv_sources()
+        idx = self.combo_iptv_source.findData("custom")
+        if idx >= 0:
+            self.combo_iptv_source.setCurrentIndex(idx)
+        else:
+            self._on_iptv_source_changed()
+
+    def _update_iptv_chip(self):
+        btn = self.chip_buttons.get("iptv")
+        if not btn:
+            return
+        from app.core.iptv import IPTVService
+        channels = IPTVService.get_instance().get_channels()
+        count = len(channels)
+        text = f"📺 Canais FAST ({count})" if count > 0 else "📺 Canais FAST"
+        btn.setText(text)
 
     def update_category_counts(self, stats: dict):
         """Atualiza os contadores em parênteses em cada chip de categoria."""
@@ -189,8 +271,6 @@ class FilterBar(QWidget):
                     label = f"Unidade: {d}"
                 self.combo_drive.addItem(label, d)
 
-
-        # Restaura seleção anterior se possível
         idx = self.combo_drive.findData(current_data)
         if idx >= 0:
             self.combo_drive.setCurrentIndex(idx)
@@ -214,6 +294,8 @@ class FilterBar(QWidget):
         is_pluto = (cat_id == "pluto")
         is_iptv = (cat_id == "iptv")
         self.combo_pluto_cat.setVisible(is_pluto)
+        self.combo_iptv_source.setVisible(is_iptv)
+        self.btn_iptv_config.setVisible(is_iptv)
         self.combo_iptv_cat.setVisible(is_iptv)
         self.combo_drive.setVisible(not is_pluto and not is_iptv)
         self._emit_changes()
