@@ -266,7 +266,7 @@ class PreviewPanel(QFrame):
 
         self.btn_open.setText("🚀 Abrir Arquivo")
         self.btn_open.setEnabled(True)
-        self.btn_cast.setEnabled(cat in ("video", "audio", "pluto") or file_data.get("is_live_stream", False))
+        self.btn_cast.setEnabled(cat in ("video", "audio", "pluto", "iptv") or file_data.get("is_live_stream", False))
         self.btn_explorer.setEnabled(True)
         self.btn_copy_path.setEnabled(True)
         self.btn_copy_folder.setEnabled(True)
@@ -275,13 +275,15 @@ class PreviewPanel(QFrame):
         # Resolução de pôster / imagem
         source_path, is_remote = resolve_poster_source(file_data)
 
-        if cat == "pluto" or file_data.get("is_live_stream"):
+        if cat in ("pluto", "iptv") or file_data.get("is_live_stream"):
             ch_name = file_data.get("channel_name", name)
             self.lbl_name.setText(ch_name)
             ch_num = file_data.get("number")
             self.lbl_size.setText(f"Canal Nº: {ch_num if ch_num else '-'}")
-            self.lbl_date.setText(f"Categoria: {file_data.get('pluto_category', 'Geral')}")
-            self.lbl_drive.setText("Origem: Pluto TV Streaming")
+            cat_name = file_data.get('iptv_category') or file_data.get('pluto_category', 'Geral')
+            self.lbl_date.setText(f"Categoria: {cat_name}")
+            origin_name = "Canais FAST Ao Vivo" if cat == "iptv" else "Pluto TV Streaming"
+            self.lbl_drive.setText(f"Origem: {origin_name}")
             summary_txt = file_data.get("summary", "")
             self.lbl_path.setText(f"Sinopse:\n{summary_txt}" if summary_txt else f"Stream:\n{file_path}")
 

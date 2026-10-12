@@ -27,6 +27,16 @@ class FilterBar(QWidget):
         except Exception:
             pass
 
+    def _populate_iptv_categories(self):
+        try:
+            from app.core.iptv import IPTVService
+            cats = IPTVService.get_instance().get_categories()
+            for c in cats:
+                icon = "🎬 " if "Filmes" in c else ("📺 " if "Séries" in c else ("📰 " if "Notícias" in c else ("🎭 " if "Cultura" in c else "")))
+                self.combo_iptv_cat.addItem(f"{icon}{c}", c)
+        except Exception:
+            pass
+
     def _init_ui(self):
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(0, 2, 0, 2)
@@ -51,6 +61,7 @@ class FilterBar(QWidget):
         self.CATEGORIES = [
             ("video", "🎬 Vídeos / Filmes"),
             ("pluto", "🪐 Pluto TV"),
+            ("iptv", "📺 Canais FAST"),
         ]
 
         self.btn_group = QButtonGroup(self)
@@ -85,10 +96,18 @@ class FilterBar(QWidget):
         self.combo_pluto_cat.setVisible(self.current_category == "pluto")
         dropdowns_layout.addWidget(self.combo_pluto_cat)
 
+        # Seletor de Categorias de Canais FAST / IPTV
+        self.combo_iptv_cat = QComboBox()
+        self.combo_iptv_cat.addItem("📺 Todas as Categorias", "all")
+        self._populate_iptv_categories()
+        self.combo_iptv_cat.currentIndexChanged.connect(self._emit_changes)
+        self.combo_iptv_cat.setVisible(self.current_category == "iptv")
+        dropdowns_layout.addWidget(self.combo_iptv_cat)
+
         self.combo_drive = QComboBox()
         self.combo_drive.addItem("Todas as Unidades", "all")
         self.combo_drive.currentIndexChanged.connect(self._emit_changes)
-        self.combo_drive.setVisible(self.current_category != "pluto")
+        self.combo_drive.setVisible(self.current_category not in ("pluto", "iptv"))
         dropdowns_layout.addWidget(self.combo_drive)
 
         self.combo_sort = QComboBox()
@@ -141,6 +160,11 @@ class FilterBar(QWidget):
                 service = PlutoTVService.get_instance()
                 pluto_count = len(service._cached_channels) if service._cached_channels else 0
                 count_str = format_count(pluto_count) if pluto_count > 0 else ""
+            elif cat_id == "iptv":
+                from app.core.iptv import IPTVService
+                channels = IPTVService.get_instance().get_channels()
+                iptv_count = len(channels)
+                count_str = format_count(iptv_count) if iptv_count > 0 else ""
             elif cat_id == "all":
                 count_str = format_count(total_files) if total_files > 0 else ""
             else:
@@ -188,8 +212,10 @@ class FilterBar(QWidget):
     def _on_category_clicked(self, cat_id: str):
         self.current_category = cat_id
         is_pluto = (cat_id == "pluto")
+        is_iptv = (cat_id == "iptv")
         self.combo_pluto_cat.setVisible(is_pluto)
-        self.combo_drive.setVisible(not is_pluto)
+        self.combo_iptv_cat.setVisible(is_iptv)
+        self.combo_drive.setVisible(not is_pluto and not is_iptv)
         self._emit_changes()
 
     def set_view_mode(self, mode: str):
@@ -204,6 +230,8 @@ class FilterBar(QWidget):
     def _emit_changes(self):
         if self.current_category == "pluto":
             sub_filter = self.combo_pluto_cat.currentData() or "all"
+        elif self.current_category == "iptv":
+            sub_filter = self.combo_iptv_cat.currentData() or "all"
         else:
             sub_filter = self.combo_drive.currentData() or "all"
         sort_by = self.combo_sort.currentData() or "name_asc"

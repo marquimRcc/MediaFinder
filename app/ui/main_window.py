@@ -311,7 +311,8 @@ class MainWindow(QMainWindow):
 
     def _update_folders_state(self):
         folders = self.config.get_watched_folders()
-        self.banner_no_folders.setVisible(len(folders) == 0)
+        is_streaming_cat = getattr(self, "_current_category", "") in ("pluto", "iptv")
+        self.banner_no_folders.setVisible(len(folders) == 0 and not is_streaming_cat)
 
     def _update_drives_list(self):
         stats = self.db.get_stats()
@@ -331,6 +332,7 @@ class MainWindow(QMainWindow):
 
         self.config.set("last_category_filter", category)
         self.config.set("last_drive_filter", drive)
+        self._update_folders_state()
         self.perform_search()
 
     def _toggle_preview_panel(self, visible: Optional[bool] = None):
@@ -354,6 +356,54 @@ class MainWindow(QMainWindow):
         return self.results_table.get_selected_file()
 
     def perform_search(self):
+        if self._current_category == "iptv":
+            from app.core.iptv import IPTVService
+            svc = IPTVService.get_instance()
+            channels = svc.get_channels()
+            if self._current_drive and self._current_drive != "all":
+                channels = [c for c in channels if c.get("category") == self._current_drive]
+
+            if self._current_query:
+                q = self._current_query.strip().lower()
+                channels = [
+                    c for c in channels
+                    if q in c["name"].lower() or q in c["category"].lower() or q in c.get("summary", "").lower()
+                ]
+
+            iptv_items = []
+            for ch in channels:
+                iptv_items.append({
+                    "id": f"iptv_{ch['id']}",
+                    "name": f"{ch['name']} — {ch['category']}",
+                    "extension": "HLS",
+                    "size": 0,
+                    "drive": "FAST",
+                    "mtime": 0,
+                    "path": ch["stream_url"],
+                    "category": "iptv",
+                    "is_live_stream": True,
+                    "channel_id": ch["id"],
+                    "channel_name": ch["name"],
+                    "iptv_category": ch["category"],
+                    "summary": ch.get("summary", ""),
+                    "logo": ch.get("logo", ""),
+                    "thumbnail": ch.get("logo", ""),
+                    "poster_url": ch.get("logo", ""),
+                    "number": ch.get("number", 0),
+                    "parent_dir": f"Canais FAST Ao Vivo • {ch['category']}"
+                })
+
+            self.results_grid.set_results(iptv_items)
+            self.results_table.set_results(iptv_items)
+            query_desc = f' para "{self._current_query}"' if self._current_query else ""
+            cat_desc = f" [{self._current_drive}]" if (self._current_drive and self._current_drive != "all") else ""
+            self.lbl_status_results.setText(
+                f"📺 Canais FAST{cat_desc}: {len(iptv_items)} emissoras e canais ao vivo{query_desc}"
+            )
+            if not iptv_items:
+                self.preview_panel.set_file_data(None)
+            return
+
         if self._current_category == "pluto":
             from app.core.pluto_tv import PlutoTVService
             svc = PlutoTVService.get_instance()

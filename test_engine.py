@@ -498,7 +498,28 @@ def run_tests():
 
             web_server.stop()
 
-        print("✓ Todos os componentes, streaming HTTP 206, metadados IMDb, integração Pluto TV, diálogos, segurança e IndexWorker validados com sucesso!")
+        # Validação do IPTVService e canais FAST
+        from app.core.iptv import IPTVService
+        iptv_svc = IPTVService.get_instance()
+        iptv_channels = iptv_svc.get_channels()
+        iptv_categories = iptv_svc.get_categories()
+        assert len(iptv_channels) >= 5, "Deveria ter carregado canais FAST padrão"
+        assert len(iptv_categories) >= 3, "Deveria ter categorias de canais FAST"
+        filtered_news = iptv_svc.get_channels(category="Notícias")
+        assert any("Record News" in c["name"] for c in filtered_news), "Deveria conter Record News em Notícias"
+
+        # Teste do parser M3U
+        sample_m3u = """#EXTM3U
+#EXTINF:-1 tvg-id="teste1" tvg-name="Canal Teste" tvg-logo="http://logo.png" group-title="Testes",Canal Teste
+https://exemplo.com/live.m3u8
+"""
+        parsed = iptv_svc.parse_m3u_content(sample_m3u)
+        assert len(parsed) == 1
+        assert parsed[0]["name"] == "Canal Teste"
+        assert parsed[0]["category"] == "Testes"
+        assert parsed[0]["stream_url"] == "https://exemplo.com/live.m3u8"
+
+        print("✓ Todos os componentes, streaming HTTP 206, metadados IMDb, Pluto TV, IPTV FAST, diálogos e IndexWorker validados com sucesso!")
     finally:
         try:
             if os.path.exists(ui_db_path):

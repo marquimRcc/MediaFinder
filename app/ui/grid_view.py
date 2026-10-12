@@ -179,7 +179,7 @@ class MediaCardDelegate(QStyledItemDelegate):
 
         # Determina a imagem (pôster local no disco, URL web, thumbnail ou logo)
         img_src, is_remote = resolve_poster_source(data)
-        is_live = data.get("is_live_stream", False) or data.get("category") == "pluto"
+        is_live = data.get("is_live_stream", False) or data.get("category") in ("pluto", "iptv")
 
         cache_key = img_src or str(data.get("id", ""))
         pixmap = self._get_or_load_pixmap(cache_key, img_src, is_remote, data.get("id"))
@@ -189,7 +189,7 @@ class MediaCardDelegate(QStyledItemDelegate):
             dy = poster_rect.y() + (poster_rect.height() - pixmap.height()) // 2
             painter.drawPixmap(dx, dy, pixmap)
         else:
-            icon_char = "🪐" if is_live else ("🎬" if data.get("category") == "video" else ("🖼️" if data.get("category") == "image" else "📄"))
+            icon_char = "📺" if data.get("category") == "iptv" else ("🪐" if is_live else ("🎬" if data.get("category") == "video" else ("🖼️" if data.get("category") == "image" else "📄")))
             fallback_font = QFont(painter.font())
             fallback_font.setPointSize(22)
             painter.setFont(fallback_font)
@@ -256,7 +256,10 @@ class MediaCardDelegate(QStyledItemDelegate):
         painter.drawText(title_rect, Qt.AlignLeft | Qt.AlignVCenter, elided_title)
 
         if is_live:
-            sub_text = f"Pluto TV • {data.get('pluto_category', 'Geral')}"
+            if data.get("category") == "iptv":
+                sub_text = f"Ao Vivo • {data.get('iptv_category', 'Geral')}"
+            else:
+                sub_text = f"Pluto TV • {data.get('pluto_category', 'Geral')}"
         else:
             year = data.get("meta_year")
             genre = data.get("meta_genre")
