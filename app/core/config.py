@@ -147,17 +147,19 @@ class AppConfig:
             return self.default_config.copy()
 
     def save(self, data: Dict[str, Any] = None) -> None:
-        """Salva as configurações atuais no arquivo JSON."""
+        """Salva as configurações atuais no arquivo JSON de forma atômica."""
         if data is not None:
             self.data = data
         try:
-            with open(self.config_file, "w", encoding="utf-8") as f:
+            tmp_file = self.config_file.with_suffix(".tmp")
+            with open(tmp_file, "w", encoding="utf-8") as f:
                 json.dump(self.data, f, indent=4, ensure_ascii=False)
             if sys.platform != "win32":
                 try:
-                    os.chmod(self.config_file, 0o600)
+                    os.chmod(tmp_file, 0o600)
                 except OSError:
                     pass
+            os.replace(tmp_file, self.config_file)
         except Exception as e:
             logger.error(f"Erro ao salvar config: {e}")
 

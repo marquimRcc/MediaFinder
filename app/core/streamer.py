@@ -152,8 +152,14 @@ class RangeHTTPRequestHandler(BaseHTTPRequestHandler):
             rel = clean_path.lstrip("/")
             target_file = os.path.normpath(os.path.join(WEB_DIR, rel))
 
-        # Proteção contra Path Traversal
-        if not target_file.startswith(WEB_DIR) or not os.path.isfile(target_file):
+        # Proteção rigorosa contra Path Traversal
+        real_web_dir = os.path.abspath(WEB_DIR)
+        real_target = os.path.abspath(target_file)
+        try:
+            if os.path.commonpath([real_target, real_web_dir]) != real_web_dir or not os.path.isfile(real_target):
+                self.send_error(404, "Arquivo não encontrado")
+                return
+        except ValueError:
             self.send_error(404, "Arquivo não encontrado")
             return
 
