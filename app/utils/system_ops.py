@@ -2,7 +2,10 @@ import os
 import subprocess
 import sys
 import shutil
+import logging
 from pathlib import Path
+
+logger = logging.getLogger("MediaFinder.SystemOps")
 
 DANGEROUS_EXECUTABLE_EXTENSIONS = {
     # Windows
@@ -63,7 +66,7 @@ def open_file(file_path: str) -> bool:
             subprocess.Popen(["xdg-open", norm_path])
             return True
     except Exception as e:
-        print(f"Erro ao abrir arquivo: {e}")
+        logger.error(f"Erro ao abrir arquivo: {e}")
         return False
 
 def reveal_in_explorer(file_path: str) -> bool:
@@ -107,7 +110,7 @@ def reveal_in_explorer(file_path: str) -> bool:
             subprocess.Popen(["xdg-open", target_dir])
             return True
     except Exception as e:
-        print(f"Erro ao abrir gerenciador de arquivos: {e}")
+        logger.error(f"Erro ao abrir gerenciador de arquivos: {e}")
         return False
 
 def is_path_accessible(path_str: str) -> bool:

@@ -89,6 +89,11 @@ class SettingsDialog(QDialog):
         self.btn_clear_db.clicked.connect(self._on_clear_db_clicked)
         bottom_layout.addWidget(self.btn_clear_db)
 
+        self.btn_optimize_db = QPushButton("⚡ Otimizar Banco")
+        self.btn_optimize_db.setToolTip("Compacta o banco de dados (VACUUM) e atualiza os índices de busca (PRAGMA optimize)")
+        self.btn_optimize_db.clicked.connect(self._on_optimize_db_clicked)
+        bottom_layout.addWidget(self.btn_optimize_db)
+
         bottom_layout.addStretch(1)
 
         self.btn_save_close = QPushButton("💾 Salvar e Fechar")
@@ -575,6 +580,19 @@ class SettingsDialog(QDialog):
             self.db.clear_database()
             self._load_data()
             QMessageBox.information(self, "Sucesso", "Banco de dados limpo com sucesso.")
+
+    def _on_optimize_db_clicked(self):
+        self.btn_optimize_db.setEnabled(False)
+        self.btn_optimize_db.setText("⏳ Otimizando...")
+        from PySide6.QtWidgets import QApplication
+        QApplication.processEvents()
+        success = self.db.maintenance()
+        self.btn_optimize_db.setEnabled(True)
+        self.btn_optimize_db.setText("⚡ Otimizar Banco")
+        if success:
+            QMessageBox.information(self, "Sucesso", "Banco de dados otimizado e compactado com sucesso!")
+        else:
+            QMessageBox.warning(self, "Aviso", "Ocorreu uma falha ao otimizar o banco de dados. Verifique os logs.")
 
     def _on_save_and_close(self):
         self.config.set_folder_groups(self.groups_data)

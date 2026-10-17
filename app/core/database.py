@@ -1,8 +1,11 @@
 import os
 import sys
 import sqlite3
+import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple, Set
+
+logger = logging.getLogger("MediaFinder.Database")
 
 class MediaDatabase:
     """Gerencia a base de dados SQLite e índices FTS para busca instantânea de arquivos."""
@@ -106,7 +109,7 @@ class MediaDatabase:
                     END;
                 """)
             except Exception as e:
-                print(f"Nota: FTS5 não pôde ser inicializado ({e}), fallback para LIKE.")
+                logger.warning(f"Nota: FTS5 não pôde ser inicializado ({e}), fallback para LIKE.")
 
             # Tabela de perfis de usuário (Acesso Mobile / PWA)
             cursor.execute("""
@@ -507,7 +510,7 @@ class MediaDatabase:
             }
 
     def clear_database(self) -> None:
-        """Limpa todos os registros do banco de dados."""
+        """Limpa todos os registros do banco de dados e compacta o arquivo."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM files;")
@@ -516,6 +519,7 @@ class MediaDatabase:
             except Exception:
                 pass
             conn.commit()
+        self.maintenance()
 
     def get_profiles(self) -> List[Dict[str, Any]]:
         """Retorna todos os perfis cadastrados com indicador se possuem PIN ativo."""
@@ -745,5 +749,28 @@ class MediaDatabase:
                 LIMIT ?;
             """, (limit,))
             return [dict(r) for r in cursor.fetchall()]
+
+    def maintenance(self) -> bool:
+        """
+        Executa manutenção periódica e compactação no banco de dados SQLite:
+        - PRAGMA optimize para atualizar estatísticas de consulta do query planner
+        - VACUUM para desfragmentar e reduzir o tamanho do arquivo .db em disco
+        - PRAGMA wal_checkpoint(TRUNCATE) para esvaziar o log WAL
+        """
+        try:
+            logger.info("Iniciando manutenção do banco de dados (VACUUM e PRAGMA optimize)...")
+            conn = sqlite3.connect(self.db_path, timeout=60.0)
+            conn.isolation_level = None  # Autocommit para viabilizar VACUUM
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA optimize;")
+            cursor.execute("VACUUM;")
+            cursor.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+            conn.close()
+            logger.info("Manutenção do banco de dados concluída com sucesso.")
+            return True
+        except Exception as e:
+            logger.error(f"Erro durante manutenção do banco de dados: {e}")
+            return False
+
 
 

@@ -1,8 +1,11 @@
 import os
 import sys
 import json
+import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
+
+logger = logging.getLogger("MediaFinder.Config")
 
 class AppConfig:
     """Gerencia o salvamento e carregamento de configurações e histórico do usuário."""
@@ -140,7 +143,7 @@ class AppConfig:
                         data[k] = v
                 return data
         except Exception as e:
-            print(f"Aviso: Erro ao carregar config.json ({e}), usando padrão.")
+            logger.warning(f"Aviso: Erro ao carregar config.json ({e}), usando padrão.")
             return self.default_config.copy()
 
     def save(self, data: Dict[str, Any] = None) -> None:
@@ -156,7 +159,7 @@ class AppConfig:
                 except OSError:
                     pass
         except Exception as e:
-            print(f"Erro ao salvar config: {e}")
+            logger.error(f"Erro ao salvar config: {e}")
 
     def get_watched_folders(self) -> List[str]:
         return self.data.get("watched_folders", self.default_config["watched_folders"])
