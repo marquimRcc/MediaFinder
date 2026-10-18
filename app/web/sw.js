@@ -34,13 +34,20 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  // Não cacheia chamadas de API ou streaming de vídeo
+  // Não intercepta chamadas de API ou streaming de vídeo
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/stream/')) {
     return;
   }
+  // Network-First: busca versão mais recente no servidor; se offline, serve do cache
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      return cached || fetch(event.request).catch(() => cached);
-    })
+    fetch(event.request)
+      .then((response) => {
+        if (response && response.status === 200 && event.request.method === 'GET') {
+          const respClone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, respClone));
+        }
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });

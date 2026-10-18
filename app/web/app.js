@@ -19,6 +19,8 @@ const App = {
   cachedPlutoChannels: [],
   cachedPlutoCategories: [],
   searchQuery: '',
+  catalogReqId: 0,
+  kidsReqId: 0,
 
   // Ícones de avatar
   avatarMap: {
@@ -316,6 +318,7 @@ const App = {
     if (catalogSection) catalogSection.style.display = 'block';
     if (catalogTitle) catalogTitle.textContent = 'Explorar Catálogo';
 
+    const reqId = ++this.catalogReqId;
     try {
       const isSearching = !!(this.searchQuery && this.searchQuery.trim());
       const heroSection = document.getElementById('hero-continue');
@@ -333,6 +336,7 @@ const App = {
       const query = isSearching ? `&query=${encodeURIComponent(this.searchQuery.trim())}` : '';
       const res = await fetch(`/api/catalog?profile=${this.currentProfile.id}${cat}${query}&limit=60`);
       const data = await res.json();
+      if (reqId !== this.catalogReqId) return;
       const container = document.getElementById('catalog-grid');
       container.innerHTML = '';
 
@@ -694,6 +698,7 @@ const App = {
   },
 
   async loadKidsContent() {
+    const reqId = ++this.kidsReqId;
     try {
       const isSearching = !!(this.searchQuery && this.searchQuery.trim());
       const cartoonSec = document.getElementById('kids-carousel-cartoons')?.closest('section');
@@ -718,6 +723,7 @@ const App = {
       const query = isSearching ? `&query=${encodeURIComponent(this.searchQuery.trim())}` : '';
       const res = await fetch(`/api/catalog?profile=kids&is_kids=1${query}&limit=60`);
       const data = await res.json();
+      if (reqId !== this.kidsReqId) return;
 
       const cartoonsContainer = document.getElementById('kids-carousel-cartoons');
       const gridContainer = document.getElementById('kids-catalog-grid');
@@ -884,10 +890,14 @@ const App = {
         actors.forEach(actor => {
           const chip = document.createElement('div');
           chip.className = 'cast-chip';
-          chip.innerHTML = `
-            <div class="cast-avatar">🎭</div>
-            <div class="cast-name">${actor}</div>
-          `;
+          const avatar = document.createElement('div');
+          avatar.className = 'cast-avatar';
+          avatar.textContent = '🎭';
+          const nameEl = document.createElement('div');
+          nameEl.className = 'cast-name';
+          nameEl.textContent = actor;
+          chip.appendChild(avatar);
+          chip.appendChild(nameEl);
           castList.appendChild(chip);
         });
         document.getElementById('details-cast-section').style.display = 'block';
@@ -1056,7 +1066,15 @@ const App = {
         btn.style.width = '100%';
         btn.style.textAlign = 'left';
         btn.style.padding = '14px';
-        btn.innerHTML = `<strong>📺 ${dev.name}</strong><br><small style="color: var(--text-muted);">${dev.model || dev.host}</small>`;
+        const strong = document.createElement('strong');
+        strong.textContent = `📺 ${dev.name || 'TV'}`;
+        const br = document.createElement('br');
+        const small = document.createElement('small');
+        small.style.color = 'var(--text-muted)';
+        small.textContent = dev.model || dev.host || '';
+        btn.appendChild(strong);
+        btn.appendChild(br);
+        btn.appendChild(small);
         btn.onclick = () => this.startCast(dev.id);
         listEl.appendChild(btn);
       });

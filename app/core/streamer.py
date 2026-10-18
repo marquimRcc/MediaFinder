@@ -237,9 +237,9 @@ class RangeHTTPRequestHandler(BaseHTTPRequestHandler):
         if m_stream:
             file_id = int(m_stream.group(1))
             with db._get_connection() as conn:
-                row = conn.execute("SELECT path FROM files WHERE id = ?;", (file_id,)).fetchone()
-            if not row or not os.path.isfile(row["path"]):
-                self._send_json_response({"error": "Arquivo não encontrado"}, 404, send_body)
+                row = conn.execute("SELECT path, category FROM files WHERE id = ?;", (file_id,)).fetchone()
+            if not row or row["category"] not in ("video", "audio", "image") or not os.path.isfile(row["path"]):
+                self._send_json_response({"error": "Mídia não encontrada ou formato não suportado"}, 404, send_body)
                 return
             stream_url = media_server.register_file(row["path"])
             self.send_response(302)
@@ -1110,7 +1110,8 @@ class TVCastManager(QObject):
                             if state == "IDLE" and curr > 0 and (dur > 0 and curr >= dur - 3.0):
                                 self.is_casting = False
                                 self.last_state = "IDLE"
-                                self.stream_server.clear_tokens()
+                                if self._current_file_path and self.stream_server:
+                                    self.stream_server.revoke_token(self._current_file_path)
                                 self.cast_stopped.emit()
                                 break
 
@@ -1154,7 +1155,8 @@ class TVCastManager(QObject):
                 pass
         self.is_casting = False
         self.last_state = "IDLE"
-        self.stream_server.clear_tokens()
+        if self._current_file_path and self.stream_server:
+            self.stream_server.revoke_token(self._current_file_path)
         self.cast_stopped.emit()
 
     def seek(self, position_seconds: float):
