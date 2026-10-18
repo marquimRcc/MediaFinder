@@ -157,6 +157,18 @@ class MediaDatabase:
             """)
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_progress_updated ON playback_progress(updated_at DESC);")
 
+            # Tabela de durações técnicas reais verificadas por reprodução
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS file_durations (
+                    file_id INTEGER PRIMARY KEY,
+                    duration_seconds INTEGER NOT NULL,
+                    file_size INTEGER NOT NULL,
+                    mtime REAL NOT NULL,
+                    updated_at REAL NOT NULL,
+                    FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
+                );
+            """)
+
             # Tabela de metadados enriquecidos (IMDb / OMDb / TMDb)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS media_metadata (
@@ -653,6 +665,42 @@ class MediaDatabase:
             """, (profile_id, file_id))
             row = cursor.fetchone()
             return dict(row) if row else None
+
+    def save_file_duration(self, file_id: int, duration_seconds: int, file_size: int, mtime: float) -> None:
+        """Salva a duração técnica real do arquivo com invalidação por tamanho e timestamp."""
+        if not file_id or duration_seconds <= 0:
+            return
+        import time
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO file_durations (file_id, duration_seconds, file_size, mtime, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(file_id) DO UPDATE SET
+                    duration_seconds = excluded.duration_seconds,
+                    file_size = excluded.file_size,
+                    mtime = excluded.mtime,
+                    updated_at = excluded.updated_at;
+            """, (file_id, int(duration_seconds), int(file_size), float(mtime), time.time()))
+            conn.commit()
+
+    def get_file_duration(self, file_id: int, file_size: int, mtime: float) -> Optional[int]:
+        """Retorna a duração persistida se tamanho e mtime coincidirem (invalidação automática)."""
+        if not file_id:
+            return None
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT duration_seconds, file_size, mtime
+                FROM file_durations
+                WHERE file_id = ?;
+            """, (file_id,))
+            row = cursor.fetchone()
+            if row:
+                dur, saved_size, saved_mtime = row
+                if (file_size <= 0 or saved_size == int(file_size)) and (mtime <= 0 or abs(saved_mtime - float(mtime)) < 1.0):
+                    return int(dur)
+        return None
 
     def get_continue_watching(self, profile_id: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Retorna mídias pausadas entre 10s e 95% do total para 'Continuar Assistindo'."""

@@ -1,6 +1,9 @@
 import os
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
+
+logger = logging.getLogger("mediafinder.tv_mode")
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
@@ -33,6 +36,7 @@ class TVModeWindow(QMainWindow):
         self.schedule_mgr = TVScheduleManager(self.db, self.config)
         self.current_channel_idx = 0
         self.current_playing_item: Optional[ScheduleItem] = None
+        self._current_schedule_date = datetime.now().date()
 
         self._init_ui()
         self._setup_shortcuts()
@@ -411,9 +415,23 @@ class TVModeWindow(QMainWindow):
         self._select_channel(target_idx)
 
     def _on_media_duration_resolved(self, file_path: str, duration_sec: int):
-        """Atualiza a grade com a duração real do arquivo sem interromper a transmissão."""
+        """Atualiza a grade com a duração real do arquivo sem interromper a transmissão e persiste no banco."""
         if not self.current_playing_item or self.current_playing_item.file_path != file_path:
             return
+
+        # Persiste a duração técnica no banco para futuras grades
+        file_data = self.current_playing_item.file_data
+        file_id = file_data.get("id")
+        if file_id and self.db:
+            try:
+                self.db.save_file_duration(
+                    file_id=file_id,
+                    duration_seconds=duration_sec,
+                    file_size=file_data.get("size", 0),
+                    mtime=file_data.get("mtime", 0.0)
+                )
+            except Exception as e:
+                logger.warning(f"Erro ao salvar duração persistida para {file_path}: {e}")
 
         if abs(self.current_playing_item.duration_seconds - duration_sec) > 5:
             self.current_playing_item.update_duration(duration_sec)
@@ -614,6 +632,18 @@ class TVModeWindow(QMainWindow):
     def _update_clock_and_epg(self):
         now = datetime.now()
         self.lbl_clock.setText(now.strftime("%H:%M:%S"))
+
+        # Transição de meia-noite: se mudou a data do sistema, reconstrói a grade para o novo dia
+        if now.date() != self._current_schedule_date:
+            self._current_schedule_date = now.date()
+            self.schedule_mgr.build_schedules_for_today()
+            if self.schedule_mgr.channels and 0 <= self.current_channel_idx < len(self.schedule_mgr.channels):
+                channel = self.schedule_mgr.channels[self.current_channel_idx]
+                self._populate_schedule_list(channel)
+                is_playing = (self.player_widget.player.playbackState() == QMediaPlayer.PlayingState)
+                if not is_playing or not self.current_playing_item or now >= self.current_playing_item.end_dt:
+                    self._tune_current_program(channel)
+            return
 
         # Atualiza a grade se o canal atual expirou E o player não estiver no meio da reprodução ativa
         if self.current_playing_item and self.schedule_mgr.channels:

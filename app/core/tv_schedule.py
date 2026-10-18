@@ -279,7 +279,20 @@ class TVScheduleManager:
         return [int(c) if c.isdigit() else c.lower() for c in re.split(r'(\d+)', text)]
 
     def _estimate_duration(self, f_data: Dict[str, Any], is_movie: bool = False, is_audio: bool = False) -> int:
-        """Estima a duração real de um arquivo com base em tamanho e categoria."""
+        """Retorna a duração técnica persistida ou estima com base em tamanho e categoria."""
+        file_id = f_data.get("id")
+        if file_id and self.db:
+            try:
+                persisted_dur = self.db.get_file_duration(
+                    file_id=file_id,
+                    file_size=f_data.get("size", 0),
+                    mtime=f_data.get("mtime", 0.0)
+                )
+                if persisted_dur and persisted_dur > 0:
+                    return persisted_dur
+            except Exception:
+                pass
+
         if is_audio or f_data.get("category") == "audio":
             return 240  # 4 min
 
@@ -419,9 +432,9 @@ class TVScheduleManager:
 
         return schedule
 
-    def build_schedules_for_today(self, randomize: bool = False, seed: Optional[int] = None) -> None:
+    def build_schedules_for_today(self, randomize: bool = False, seed: Optional[int] = None, target_date: Optional[datetime] = None) -> None:
         """Gera a grade de 24 horas de hoje para todos os canais configurados."""
-        today = datetime.now()
+        today = target_date if target_date is not None else datetime.now()
         start_of_day = datetime(today.year, today.month, today.day, 0, 0, 0)
 
         if randomize:
@@ -464,8 +477,9 @@ class TVScheduleManager:
             else:
                 # 2. Caso contrário, usa pool classificado ou categoria geral
                 tag = channel.auto_filter_tag
-                if tag and tag in classified_pools and classified_pools[tag]:
-                    channel_pool = classified_pools[tag]
+                if tag:
+                    # Canal temático específico: respeita estritamente o pool
+                    channel_pool = classified_pools.get(tag, [])
                 elif channel.category == "audio":
                     channel_pool = audio_files
                 else:

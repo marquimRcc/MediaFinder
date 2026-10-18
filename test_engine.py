@@ -2,6 +2,8 @@ import os
 import sys
 import tempfile
 import time
+import random
+from datetime import datetime, timedelta
 from pathlib import Path
 
 # Suporte a caracteres UTF-8 no console Windows
@@ -203,10 +205,37 @@ def run_tests():
         tv_window.toggle_sidebar()
         tv_window.regenerate_all_schedules()
 
-        # Teste de resolução de duração real no Modo TV
+        # Teste de resolução de duração real no Modo TV e persistência no banco
         if tv_window.current_playing_item:
             old_dur = tv_window.current_playing_item.duration_seconds
+            item_data = tv_window.current_playing_item.file_data
             tv_window._on_media_duration_resolved(tv_window.current_playing_item.file_path, 7200)
+            f_id = item_data.get("id")
+            if f_id:
+                persisted = ui_db.get_file_duration(f_id, item_data.get("size", 0), item_data.get("mtime", 0.0))
+                assert persisted == 7200, "Deveria recuperar a duração técnica de 7200s persistida no banco"
+                # Invalidação por tamanho alterado
+                invalidated = ui_db.get_file_duration(f_id, 9999999, item_data.get("mtime", 0.0))
+                assert invalidated is None, "Deveria invalidar cache de duração se o tamanho do arquivo mudar"
+
+        # Teste de fallback seguro para canais temáticos vazios
+        from app.core.tv_schedule import TVChannel
+        cartoon_ch = TVChannel(
+            channel_id="ch_test_cartoons",
+            number=99,
+            name="Canais Desenhos Teste",
+            icon="🦁",
+            category="video",
+            auto_filter_tag="cartoons"
+        )
+        empty_sched = tv_window.schedule_mgr._generate_random_schedule(cartoon_ch, [], datetime.now(), random.Random(42))
+        assert len(empty_sched) == 0, "Canal temático vazio não deve gerar grade com filmes aleatórios"
+
+        # Teste de transição de meia-noite / data futura
+        tomorrow = datetime.now() + timedelta(days=1)
+        tv_window.schedule_mgr.build_schedules_for_today(target_date=tomorrow)
+        if tv_window.schedule_mgr.channels and tv_window.schedule_mgr.channels[0].schedule:
+            assert tv_window.schedule_mgr.channels[0].schedule[0].start_dt.date() == tomorrow.date(), "Grade deve iniciar na data alvo especificada"
 
         # 4.4 ChannelConfigDialog
         ch_dialog = ChannelConfigDialog(config)
