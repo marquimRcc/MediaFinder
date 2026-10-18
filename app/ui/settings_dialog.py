@@ -6,12 +6,27 @@ from PySide6.QtWidgets import (
     QListWidget, QListWidgetItem, QFileDialog, QMessageBox, QGroupBox, QTabWidget,
     QInputDialog, QSplitter, QFrame, QScrollArea
 )
-from PySide6.QtCore import Signal, Qt, QUrl
+from PySide6.QtCore import Signal, Qt, QUrl, QThread
 from PySide6.QtGui import QIcon, QPixmap, QDesktopServices
 
 from app.core.config import AppConfig
 from app.core.database import MediaDatabase
 from app.utils.media_helpers import format_file_size
+
+
+class OptimizeDbWorker(QThread):
+    finished_signal = Signal(bool)
+
+    def __init__(self, db: MediaDatabase, parent=None):
+        super().__init__(parent)
+        self.db = db
+
+    def run(self):
+        try:
+            success = self.db.maintenance()
+            self.finished_signal.emit(success)
+        except Exception:
+            self.finished_signal.emit(False)
 
 
 class SettingsDialog(QDialog):
@@ -584,9 +599,11 @@ class SettingsDialog(QDialog):
     def _on_optimize_db_clicked(self):
         self.btn_optimize_db.setEnabled(False)
         self.btn_optimize_db.setText("⏳ Otimizando...")
-        from PySide6.QtWidgets import QApplication
-        QApplication.processEvents()
-        success = self.db.maintenance()
+        self._opt_worker = OptimizeDbWorker(self.db, self)
+        self._opt_worker.finished_signal.connect(self._on_optimize_finished)
+        self._opt_worker.start()
+
+    def _on_optimize_finished(self, success: bool):
         self.btn_optimize_db.setEnabled(True)
         self.btn_optimize_db.setText("⚡ Otimizar Banco")
         if success:

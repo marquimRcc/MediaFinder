@@ -1,10 +1,12 @@
 import os
+import sys
 import time
 import uuid
 import json
 import logging
 import urllib.request
 import urllib.parse
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger("MediaFinder.PlutoTV")
@@ -28,6 +30,30 @@ class PlutoTVService:
         self._session_token: str = ""
         self._token_fetch_time: float = 0.0
         self._token_ttl_seconds: float = 14400.0  # Cache de 4 horas para o JWT token
+        self._cache_dir = self._get_cache_dir()
+        self._cache_file = self._cache_dir / "pluto_channels_cache.json"
+        self._load_disk_cache()
+
+    def _get_cache_dir(self) -> Path:
+        if sys.platform == "win32":
+            base = os.getenv("APPDATA") or str(Path.home())
+        else:
+            base = os.getenv("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+        cache_path = Path(base) / "MediaFinder"
+        cache_path.mkdir(parents=True, exist_ok=True)
+        return cache_path
+
+    def _load_disk_cache(self):
+        if self._cache_file.exists():
+            try:
+                with open(self._cache_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, list) and len(data) > 0:
+                    self._cached_channels = data
+                    self._last_fetch_time = self._cache_file.stat().st_mtime
+                    logger.info(f"Pluto TV: {len(data)} canais carregados do cache em disco.")
+            except Exception as e:
+                logger.warning(f"Erro ao ler cache em disco da Pluto TV: {e}")
 
     @classmethod
     def get_instance(cls) -> "PlutoTVService":
@@ -151,6 +177,11 @@ class PlutoTVService:
             self._cached_channels = parsed_list
             self._last_fetch_time = time.time()
             logger.info(f"Pluto TV: {len(parsed_list)} canais carregados com sucesso.")
+            try:
+                with open(self._cache_file, "w", encoding="utf-8") as f:
+                    json.dump(parsed_list, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                logger.warning(f"Erro ao salvar cache em disco da Pluto TV: {e}")
         except Exception as e:
             logger.error(f"Erro ao consultar API da Pluto TV: {e}")
             if not self._cached_channels:

@@ -175,6 +175,19 @@ class FilterBar(QWidget):
 
         main_layout.addWidget(dropdowns_widget)
 
+        try:
+            from app.core.iptv import IPTVService
+            IPTVService.get_instance().signals.channels_updated.connect(self._on_iptv_background_loaded)
+        except Exception:
+            pass
+
+    def _on_iptv_background_loaded(self, source_id: str):
+        if source_id == self.combo_iptv_source.currentData():
+            self._populate_iptv_categories()
+            self._update_iptv_chip()
+            if self.current_category == "iptv":
+                self._emit_changes()
+
     def _on_iptv_source_changed(self):
         src_id = self.combo_iptv_source.currentData()
         if not src_id:

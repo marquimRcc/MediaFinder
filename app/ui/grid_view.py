@@ -45,6 +45,12 @@ class MediaCardDelegate(QStyledItemDelegate):
             if parent and hasattr(parent, "viewport"):
                 parent.viewport().update()
 
+    def shutdown(self):
+        try:
+            self._executor.shutdown(wait=False, cancel_futures=True)
+        except Exception:
+            pass
+
     def _get_or_load_pixmap(self, cache_key: str, img_src: str, is_remote: bool, file_id: Optional[int] = None) -> Optional[QPixmap]:
         """Retorna o pôster imediatamente se for local ou submete para download se for remoto."""
         if not img_src:
@@ -314,6 +320,11 @@ class MediaGridView(QListWidget):
         self.itemDoubleClicked.connect(self._on_item_double_clicked)
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self._show_context_menu)
+
+    def shutdown(self):
+        """Encerra graciosamente o delegate e a thread pool de miniaturas."""
+        if hasattr(self, 'card_delegate') and self.card_delegate:
+            self.card_delegate.shutdown()
 
     def set_results(self, files: List[Dict[str, Any]]):
         self._current_results = files

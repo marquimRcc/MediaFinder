@@ -790,10 +790,24 @@ class MainWindow(QMainWindow):
         self.cast_dialog.show()
 
     def closeEvent(self, event):
-        """Salva dimensões e estado ao fechar."""
+        """Salva dimensões e estado ao fechar e coordena shutdown gracioso de workers."""
         if self.worker and self.worker.isRunning():
             self.worker.stop()
             self.worker.wait(1000)
+
+        # Encerramento gracioso do enriquecedor de metadados em background
+        try:
+            from app.core.metadata import MediaMetadataService
+            MediaMetadataService.get_instance().stop_background_enricher()
+        except Exception:
+            pass
+
+        # Encerramento gracioso do pool de miniaturas da grade
+        if hasattr(self, 'results_grid') and self.results_grid:
+            try:
+                self.results_grid.shutdown()
+            except Exception:
+                pass
 
         self.config.set("window_width", self.width())
         self.config.set("window_height", self.height())

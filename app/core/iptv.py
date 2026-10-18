@@ -4,10 +4,12 @@ import re
 import json
 import time
 import logging
+import threading
 import urllib.request
 import urllib.parse
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
+from PySide6.QtCore import QObject, Signal
 
 logger = logging.getLogger("mediafinder.iptv")
 
@@ -228,6 +230,10 @@ CITIES_AND_REGIONS = set([
 GENERIC_PREFIXES = {"tv", "canal", "rede", "radio"}
 
 
+class IPTVSignalBridge(QObject):
+    channels_updated = Signal(str)
+
+
 class IPTVService:
     """
     Serviço central de canais FAST e IPTV ao vivo.
@@ -238,15 +244,17 @@ class IPTVService:
     _instance = None
 
     def __init__(self):
+        self.signals = IPTVSignalBridge()
         self._cache_dir = self._get_cache_dir()
         self._settings_file = self._cache_dir / "iptv_settings.json"
         self._active_source_id = "github_br"
         self._custom_url_or_path = ""
         self._custom_name = "Minha Lista M3U"
         self._channels: List[Dict[str, Any]] = []
+        self._bg_threads: Dict[str, threading.Thread] = {}
 
         self._load_settings()
-        self._load_channels_for_source(self._active_source_id)
+        self._load_channels_for_source(self._active_source_id, allow_network=False)
 
     @classmethod
     def get_instance(cls) -> "IPTVService":
@@ -304,7 +312,10 @@ class IPTVService:
         """Altera a fonte ativa e carrega seus canais."""
         self._active_source_id = source_id
         self._save_settings()
-        self._load_channels_for_source(source_id, force_refresh=force_refresh)
+        cache_file = self._get_cache_file(source_id)
+        # Se force_refresh ou sem cache prévio, não bloqueia a interface
+        allow_net = not force_refresh and cache_file.exists()
+        self._load_channels_for_source(source_id, force_refresh=force_refresh, allow_network=allow_net)
         return self._channels
 
     def get_custom_config(self) -> Tuple[str, str]:
@@ -347,6 +358,10 @@ class IPTVService:
 
             if self._active_source_id == "custom":
                 self._channels = parsed_channels
+                try:
+                    self.signals.channels_updated.emit("custom")
+                except Exception:
+                    pass
 
             return True, len(parsed_channels), f"Lista carregada com sucesso ({len(parsed_channels)} canais encontrados)!"
         except Exception as e:
@@ -356,7 +371,50 @@ class IPTVService:
     def _get_cache_file(self, source_id: str) -> Path:
         return self._cache_dir / f"iptv_cache_{source_id}.json"
 
-    def _load_channels_for_source(self, source_id: str, force_refresh: bool = False):
+    def _start_background_fetch(self, source_id: str):
+        """Inicia download em segundo plano para não congelar a interface."""
+        existing = self._bg_threads.get(source_id)
+        if existing and existing.is_alive():
+            return
+
+        def _worker():
+            self._fetch_remote_source(source_id)
+
+        t = threading.Thread(target=_worker, name=f"IPTVFetch-{source_id}", daemon=True)
+        self._bg_threads[source_id] = t
+        t.start()
+
+    def _fetch_remote_source(self, source_id: str) -> bool:
+        """Executa a requisição remota de uma lista IPTV."""
+        source_meta = next((s for s in IPTV_SOURCES if s["id"] == source_id), None)
+        if not source_meta or not source_meta.get("url"):
+            return False
+
+        try:
+            url = source_meta["url"]
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": "MediaFinder/2.0 (Mozilla/5.0 compatible)"}
+            )
+            with urllib.request.urlopen(req, timeout=12) as resp:
+                text = resp.read().decode("utf-8", errors="ignore")
+
+            parsed = self.parse_m3u_content(text, default_source="Geral")
+            if parsed:
+                self._save_cache_for_source(source_id, parsed)
+                if self._active_source_id == source_id:
+                    self._channels = parsed
+                logger.info(f"IPTVService: {len(parsed)} canais baixados e salvos para {source_id}.")
+                try:
+                    self.signals.channels_updated.emit(source_id)
+                except Exception:
+                    pass
+                return True
+        except Exception as e:
+            logger.error(f"Erro ao baixar lista remota {source_id}: {e}")
+        return False
+
+    def _load_channels_for_source(self, source_id: str, force_refresh: bool = False, allow_network: bool = True):
         """Carrega os canais da fonte informada, buscando do cache ou baixando."""
         cache_file = self._get_cache_file(source_id)
 
@@ -385,44 +443,51 @@ class IPTVService:
         # 3. Fonte: Customizada
         if source_id == "custom":
             if self._custom_url_or_path:
-                ok, count, _ = self.set_custom_source(self._custom_url_or_path, self._custom_name)
-                if ok:
+                if os.path.exists(self._custom_url_or_path):
+                    ok, count, _ = self.set_custom_source(self._custom_url_or_path, self._custom_name)
+                    if ok:
+                        return
+                elif allow_network:
+                    ok, count, _ = self.set_custom_source(self._custom_url_or_path, self._custom_name)
+                    if ok:
+                        return
+                else:
+                    self._channels = list(DEFAULT_FAST_CHANNELS)
+                    threading.Thread(
+                        target=lambda: self.set_custom_source(self._custom_url_or_path, self._custom_name),
+                        daemon=True
+                    ).start()
                     return
             self._channels = list(DEFAULT_FAST_CHANNELS)
             return
 
         # 4. Fontes remotas da comunidade (github_br, github_movies, etc.)
-        source_meta = next((s for s in IPTV_SOURCES if s["id"] == source_id), None)
-        if source_meta and source_meta.get("url"):
-            try:
-                url = source_meta["url"]
-                req = urllib.request.Request(
-                    url,
-                    headers={"User-Agent": "MediaFinder/2.0 (Mozilla/5.0 compatible)"}
-                )
-                with urllib.request.urlopen(req, timeout=12) as resp:
-                    text = resp.read().decode("utf-8", errors="ignore")
+        if not allow_network:
+            if cache_file.exists():
+                try:
+                    with open(cache_file, "r", encoding="utf-8") as f:
+                        cached_list = json.load(f)
+                        self._channels = self.deduplicate_channels(cached_list)
+                        self._start_background_fetch(source_id)
+                        return
+                except Exception:
+                    pass
+            self._channels = list(DEFAULT_FAST_CHANNELS)
+            self._start_background_fetch(source_id)
+            return
 
-                parsed = self.parse_m3u_content(text, default_source="Geral")
-                if parsed:
-                    self._channels = parsed
-                    self._save_cache_for_source(source_id, self._channels)
-                    logger.info(f"IPTVService: {len(self._channels)} canais baixados e salvos para {source_id}.")
-                    return
-            except Exception as e:
-                logger.error(f"Erro ao baixar lista remota {source_id}: {e}")
-
-        # Fallback se download falhar: tenta cache antigo ou essenciais
-        if cache_file.exists():
-            try:
-                with open(cache_file, "r", encoding="utf-8") as f:
-                    cached_list = json.load(f)
-                    self._channels = self.deduplicate_channels(cached_list)
-                    return
-            except Exception:
-                pass
-
-        self._channels = list(DEFAULT_FAST_CHANNELS)
+        # 5. Se download síncrono for permitido
+        success = self._fetch_remote_source(source_id)
+        if not success:
+            if cache_file.exists():
+                try:
+                    with open(cache_file, "r", encoding="utf-8") as f:
+                        cached_list = json.load(f)
+                        self._channels = self.deduplicate_channels(cached_list)
+                        return
+                except Exception:
+                    pass
+            self._channels = list(DEFAULT_FAST_CHANNELS)
 
     def _save_cache_for_source(self, source_id: str, channels: List[Dict[str, Any]]):
         try:
