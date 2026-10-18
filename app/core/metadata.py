@@ -25,28 +25,37 @@ def get_posters_dir() -> Path:
 def clean_movie_title(raw_name: str) -> Tuple[str, Optional[int]]:
     """
     Limpa o nome do arquivo para otimizar a busca no IMDb:
-    Remove extensoes, resolucao (1080p, 4k), rip tags (bluray, web-dl),
-    idiomas (dublado, dual), simbolos e extrai o ano de lancamento se presente.
+    Extrai o ano de lançamento antes de remover parênteses, remove resoluções,
+    rip tags com separadores (ex: web-dl, 5.1), idiomas e caracteres especiais.
     """
     name = re.sub(r"\.[a-zA-Z0-9]+$", "", raw_name)
     name = re.sub(r"@[a-zA-Z0-9_-]+", " ", name)
-    name = re.sub(r"\[.*?\]|\(.*?\)", " ", name)
-    name = re.sub(r"[\._-]+", " ", name)
 
+    # 1. Extrai ano antes de descartar parênteses
     year_match = re.search(r"\b(19\d\d|20\d\d)\b", name)
     year = int(year_match.group(1)) if year_match else None
-    name = re.sub(r"\b(19\d\d|20\d\d)\b", " ", name)
 
+    # 2. Keywords de qualidade e rip tags (suportando hífens, pontos e underscores)
     keywords = [
         r"\b1080p\b", r"\b720p\b", r"\b4k\b", r"\b2160p\b", r"\b480p\b",
-        r"\bbluray\b", r"\bbdrip\b", r"\bwebrip\b", r"\bweb-dl\b", r"\bdvdrip\b",
+        r"\bbluray\b", r"\bbdrip\b", r"\bweb[-._]?rip\b", r"\bweb[-._]?dl\b", r"\bdvdrip\b",
         r"\bvhsrip\b", r"\bhdrip\b", r"\bbrrip\b", r"\bcam\b",
         r"\bdublado\b", r"\blegendado\b", r"\bdual\b", r"\bnacional\b",
         r"\bx264\b", r"\bx265\b", r"\bhevc\b", r"\bavc\b", r"\baac\b",
-        r"\bac3\b", r"\b5\.1\b", r"\b7\.1\b"
+        r"\bac3\b", r"\b5[-._]1\b", r"\b7[-._]1\b"
     ]
     for kw in keywords:
         name = re.sub(kw, " ", name, flags=re.IGNORECASE)
+
+    # 3. Remove conteúdo em colchetes e parênteses
+    name = re.sub(r"\[.*?\]|\(.*?\)", " ", name)
+
+    # 4. Remove separadores residuais
+    name = re.sub(r"[\._-]+", " ", name)
+
+    # 5. Remove ano residual se ainda constar no corpo do título
+    if year:
+        name = re.sub(r"\b" + str(year) + r"\b", " ", name)
 
     clean = " ".join(name.split()).strip()
     return clean or raw_name, year
@@ -248,13 +257,14 @@ class MediaMetadataService:
         if not self.db:
             return None
 
-        if not force:
-            cached = self.db.get_media_metadata(file_id)
-            if cached:
-                return cached
+        cached = self.db.get_media_metadata(file_id)
+        if not force and cached and cached.get("imdb_id"):
+            return cached
 
         data = self.fetch_from_network(file_name)
         if not data:
+            if cached:
+                return cached
             clean_title, year = clean_movie_title(file_name)
             data = {
                 "imdb_id": None,

@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 import sqlite3
 import logging
 from pathlib import Path
@@ -41,6 +42,15 @@ class MediaDatabase:
         elif len(drive) == 2 and drive[1] == ":" and drive[0].isalpha():
             return drive.upper()
         return drive
+
+    @staticmethod
+    def _format_fts_query(query: str) -> str:
+        """Formata a query de busca em termos de prefixo seguros para o FTS5."""
+        clean = re.sub(r'[^\w\s]', ' ', query)
+        tokens = clean.split()
+        if not tokens:
+            return ""
+        return " ".join(f'"{token}"*' for token in tokens)
 
 
     @contextmanager
@@ -350,14 +360,28 @@ class MediaDatabase:
                 params.append(drive_clean)
 
 
-            # 3. Filtro por Query (Busca por correspondência de substrings em múltiplos termos)
+            # 3. Filtro por Query (Aceleração via FTS5 com fallback transparente para LIKE)
             if query:
-                terms = query.split()
-                like_clauses = []
-                for term in terms:
-                    like_clauses.append("(f.name LIKE ? OR f.path LIKE ?)")
-                    params.extend([f"%{term}%", f"%{term}%"])
-                where_clauses.append(" AND ".join(like_clauses))
+                fts_expr = self._format_fts_query(query)
+                use_fts = False
+                if fts_expr:
+                    try:
+                        cursor.execute("SELECT 1 FROM files_fts WHERE files_fts MATCH ? LIMIT 1", (fts_expr,))
+                        if cursor.fetchone():
+                            use_fts = True
+                    except Exception:
+                        use_fts = False
+
+                if use_fts:
+                    where_clauses.append("f.id IN (SELECT rowid FROM files_fts WHERE files_fts MATCH ?)")
+                    params.append(fts_expr)
+                else:
+                    terms = query.split()
+                    like_clauses = []
+                    for term in terms:
+                        like_clauses.append("(f.name LIKE ? OR f.path LIKE ?)")
+                        params.extend([f"%{term}%", f"%{term}%"])
+                    where_clauses.append(" AND ".join(like_clauses))
 
             where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
 
@@ -783,14 +807,14 @@ class MediaDatabase:
             conn.commit()
 
     def get_video_files_missing_metadata(self, limit: int = 50) -> List[Dict[str, Any]]:
-        """Retorna arquivos de vídeo que ainda não possuem metadados catalogados."""
+        """Retorna arquivos de vídeo que ainda não possuem metadados catalogados ou enriquecidos."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT f.id, f.name, f.path
                 FROM files f
                 LEFT JOIN media_metadata m ON m.file_id = f.id
-                WHERE f.category = 'video' AND m.file_id IS NULL
+                WHERE f.category = 'video' AND (m.file_id IS NULL OR m.imdb_id IS NULL)
                 ORDER BY f.mtime DESC
                 LIMIT ?;
             """, (limit,))
