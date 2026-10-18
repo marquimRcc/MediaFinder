@@ -54,7 +54,7 @@ def clean_movie_title(raw_name: str) -> Tuple[str, Optional[int]]:
 def translate_parental_rating(rated: Optional[str]) -> str:
     """Converte as classificações etárias americanas (MPAA) para padrão brasileiro."""
     if not rated or rated.upper() in ["N/A", "NOT RATED", "UNRATED"]:
-        return "Livre"
+        return "Desconhecido"
     r = rated.upper().strip()
     if r in ["G", "TV-G", "TV-Y", "PASSED", "APPROVED"]:
         return "Livre"
@@ -265,7 +265,7 @@ class MediaMetadataService:
                 "votes": None,
                 "runtime": None,
                 "genre": "Filme",
-                "rated": "Livre",
+                "rated": "Desconhecido",
                 "plot": None,
                 "director": None,
                 "actors": None,

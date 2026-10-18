@@ -440,8 +440,18 @@ class RangeHTTPRequestHandler(BaseHTTPRequestHandler):
         # POST /api/profiles/set-pin
         if path == "/api/profiles/set-pin":
             profile_id = body.get("profile_id", "")
-            pin = body.get("pin", "")
-            ok = db.set_profile_pin(profile_id, pin)
+            new_pin = body.get("pin", "")
+            current_pin = body.get("current_pin", "")
+            profile = db.get_profile(profile_id)
+            if not profile:
+                self._send_json_response({"error": "Perfil não encontrado", "success": False}, 404)
+                return
+            # Se o perfil já possui PIN configurado, exige validação do PIN atual
+            if profile.get("has_pin"):
+                if not db.verify_profile_pin(profile_id, current_pin):
+                    self._send_json_response({"error": "PIN atual incorreto", "success": False}, 403)
+                    return
+            ok = db.set_profile_pin(profile_id, new_pin)
             self._send_json_response({"success": ok})
             return
 

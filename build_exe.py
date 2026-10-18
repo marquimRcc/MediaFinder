@@ -30,6 +30,7 @@ def build():
         "--noconfirm",
         f"--icon={icon_file}",
         f"--add-data=assets{sep}assets",
+        f"--add-data=app/web{sep}app/web",
         # Inclui apenas os submódulos PySide6 utilizados pelo MediaFinder
         "--collect-submodules=PySide6.QtCore",
         "--collect-submodules=PySide6.QtGui",

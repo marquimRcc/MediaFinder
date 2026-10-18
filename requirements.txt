@@ -3,3 +3,4 @@ Pillow>=10.0.0
 pyinstaller>=6.0.0
 pychromecast>=14.0.0
 send2trash>=2.0.0
+qrcode>=7.4.2

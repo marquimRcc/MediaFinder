@@ -3,7 +3,8 @@ import sys
 import sqlite3
 import logging
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple, Set
+from contextlib import contextmanager
+from typing import List, Dict, Any, Optional, Tuple, Set, Generator
 
 logger = logging.getLogger("MediaFinder.Database")
 
@@ -42,15 +43,24 @@ class MediaDatabase:
         return drive
 
 
-    def _get_connection(self) -> sqlite3.Connection:
+    @contextmanager
+    def _get_connection(self) -> Generator[sqlite3.Connection, None, None]:
         conn = sqlite3.connect(self.db_path, timeout=30.0)
         conn.row_factory = sqlite3.Row
-        # Otimizações de performance SQLite
+        # Integridade referencial e otimizações de performance SQLite
+        conn.execute("PRAGMA foreign_keys = ON;")
         conn.execute("PRAGMA journal_mode = WAL;")
         conn.execute("PRAGMA synchronous = NORMAL;")
         conn.execute("PRAGMA cache_size = -64000;") # 64MB de cache
         conn.execute("PRAGMA temp_store = MEMORY;")
-        return conn
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
     def _init_db(self) -> None:
         with self._get_connection() as conn:
@@ -207,16 +217,35 @@ class MediaDatabase:
             conn.commit()
             return cursor.rowcount
 
+    @staticmethod
+    def _escape_like_pattern(text: str) -> str:
+        r"""Escapa caracteres curinga do SQL LIKE (_, %, \) para busca literal."""
+        return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+    @staticmethod
+    def _is_path_under_root(path_str: str, root_str: str) -> bool:
+        """Verifica com rigor de plataforma se path_str é igual ou filho de root_str."""
+        try:
+            p_norm = os.path.normpath(path_str)
+            r_norm = os.path.normpath(root_str)
+            if sys.platform != "win32":
+                return p_norm == r_norm or p_norm.startswith(r_norm + "/")
+            else:
+                return p_norm.lower() == r_norm.lower() or p_norm.lower().startswith((r_norm + "\\").lower())
+        except Exception:
+            return False
+
     def remove_missing_files(self, existing_paths_set: set, folder_root: str, skipped_dirs: Optional[Set[str]] = None) -> int:
         """Remove do banco arquivos da pasta que não existem mais no disco, preservando subpastas inacessíveis."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             clean_root = os.path.normpath(folder_root).rstrip("/\\")
-            prefix_fwd = clean_root + "/%"
-            prefix_back = clean_root + "\\%"
-            # Seleciona caminhos que correspondem à pasta ou estão dentro dela com separador (/ ou \)
+            esc_root = self._escape_like_pattern(clean_root)
+            prefix_fwd = esc_root + "/%"
+            prefix_back = esc_root + "\\%"
+            # Seleciona caminhos candidatos usando ESCAPE para evitar que '_' ou '%' virem curingas
             cursor.execute(
-                "SELECT id, path FROM files WHERE path = ? OR path LIKE ? OR path LIKE ?",
+                "SELECT id, path FROM files WHERE path = ? OR path LIKE ? ESCAPE '\\' OR path LIKE ? ESCAPE '\\'",
                 (clean_root, prefix_fwd, prefix_back)
             )
             rows = cursor.fetchall()
@@ -229,6 +258,9 @@ class MediaDatabase:
             ids_to_delete = []
             for r in rows:
                 p = r["path"]
+                # Validação estrita em Python para garantir case-sensitivity no Linux e limites de diretório
+                if not self._is_path_under_root(p, clean_root):
+                    continue
                 if p in existing_paths_set:
                     continue
                 # Se o arquivo estava dentro de uma subpasta que não pôde ser lida por falta de permissão, preserva
@@ -242,7 +274,6 @@ class MediaDatabase:
                     batch = ids_to_delete[i:i+900]
                     placeholders = ",".join("?" for _ in batch)
                     cursor.execute(f"DELETE FROM files WHERE id IN ({placeholders})", batch)
-                conn.commit()
                 return len(ids_to_delete)
             return 0
 
@@ -258,7 +289,6 @@ class MediaDatabase:
                 placeholders = ",".join("?" for _ in batch)
                 cursor.execute(f"DELETE FROM files WHERE path IN ({placeholders})", batch)
                 deleted_count += cursor.rowcount
-            conn.commit()
             return deleted_count
 
     def remove_folder_records(self, folder_path: str) -> int:
@@ -266,24 +296,29 @@ class MediaDatabase:
         if not folder_path:
             return 0
         clean_root = os.path.normpath(folder_path).rstrip("/\\")
-        prefix_fwd = clean_root + "/%"
-        prefix_back = clean_root + "\\%"
+        esc_root = self._escape_like_pattern(clean_root)
+        prefix_fwd = esc_root + "/%"
+        prefix_back = esc_root + "\\%"
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "DELETE FROM files WHERE path = ? OR path LIKE ? OR path LIKE ?",
+                "SELECT id, path FROM files WHERE path = ? OR path LIKE ? ESCAPE '\\' OR path LIKE ? ESCAPE '\\'",
                 (clean_root, prefix_fwd, prefix_back)
             )
-            deleted_count = cursor.rowcount
-            try:
-                cursor.execute(
-                    "DELETE FROM files_fts WHERE path = ? OR path LIKE ? OR path LIKE ?",
-                    (clean_root, prefix_fwd, prefix_back)
-                )
-            except Exception:
-                pass
-            conn.commit()
-            return deleted_count
+            rows = cursor.fetchall()
+            ids_to_delete = [
+                r["id"] for r in rows
+                if self._is_path_under_root(r["path"], clean_root)
+            ]
+
+            if not ids_to_delete:
+                return 0
+
+            for i in range(0, len(ids_to_delete), 900):
+                batch = ids_to_delete[i:i+900]
+                placeholders = ",".join("?" for _ in batch)
+                cursor.execute(f"DELETE FROM files WHERE id IN ({placeholders})", batch)
+            return len(ids_to_delete)
 
 
     def search_files(
@@ -294,7 +329,7 @@ class MediaDatabase:
         sort_by: str = "name_asc",
         limit: int = 500,
         offset: int = 0
-    ) -> Tuple[List[Dict[str, Any]], int]:
+    ) -> Tuple[List[Dict[str, Any]], int, int]:
         """Realiza busca ultra rápida com múltiplos filtros e paginação."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -550,7 +585,9 @@ class MediaDatabase:
             cursor = conn.cursor()
             cursor.execute("SELECT pin_hash FROM user_profiles WHERE id = ?;", (profile_id,))
             row = cursor.fetchone()
-            if not row or not row["pin_hash"]:
+            if not row:
+                return False  # Perfil inexistente não autoriza acesso
+            if not row["pin_hash"]:
                 return True  # Sem PIN configurado, liberado
             import hashlib
             computed = hashlib.sha256(str(pin).strip().encode("utf-8")).hexdigest()
@@ -632,17 +669,26 @@ class MediaDatabase:
             where_clauses = []
             params: List[Any] = []
 
-            # Perfil Kids: filtra por padrões infantis ou classificação indicativa Livre/10+
+            # Perfil Kids: proteção estrita contra conteúdo adulto e desconhecido
             if is_kids:
                 kids_keywords = [
                     "%desenho%", "%kids%", "%infantil%", "%animacao%", "%animation%",
-                    "%anime%", "%disney%", "%pixar%", "%cartoon%", "%barbie%", "%lego%"
+                    "%disney%", "%pixar%", "%cartoon%", "%barbie%", "%lego%"
                 ]
                 kids_conditions = " OR ".join(["(f.path LIKE ? OR f.name LIKE ?)" for _ in kids_keywords])
                 kids_params = []
                 for kw in kids_keywords:
                     kids_params.extend([kw, kw])
-                where_clauses.append(f"({kids_conditions} OR m.rated IN ('Livre', 'L', 'G', 'TV-Y', 'TV-G', '10+'))")
+
+                # Regras de proteção infantil:
+                # 1. NUNCA exibir títulos com classificação indicativa restritiva (14+, 16+, 18+, R, TV-MA, etc.)
+                # 2. Exibir títulos com classificação verificada Livre ou 10+
+                # 3. Para títulos sem classificação (ou 'Desconhecido'), exigir correspondência com termos infantis explícitos
+                where_clauses.append(f"""(
+                    (m.rated IN ('Livre', 'L', 'G', 'TV-Y', 'TV-G', '10+', 'PG', 'TV-PG'))
+                    OR
+                    ((m.rated IS NULL OR m.rated IN ('Desconhecido', '')) AND ({kids_conditions}))
+                ) AND (m.rated IS NULL OR m.rated NOT IN ('14+', '16+', '18+', 'R', 'NC-17', 'TV-MA', 'TV-14'))""")
                 params.extend(kids_params)
 
             if category and category.lower() != "all":
