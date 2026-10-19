@@ -4,6 +4,7 @@ import sys
 import shutil
 import logging
 from pathlib import Path
+from typing import Optional, List
 
 logger = logging.getLogger("MediaFinder.SystemOps")
 
@@ -22,21 +23,47 @@ def is_dangerous_file(file_path: str) -> bool:
     ext = os.path.splitext(file_path)[1].lower()
     return ext in DANGEROUS_EXECUTABLE_EXTENSIONS
 
-def open_file(file_path: str) -> bool:
+def open_file(file_path: str, fallback_urls: Optional[List[str]] = None, title: Optional[str] = None) -> bool:
     """
     Abre o arquivo no aplicativo padrão associado no sistema operacional (Linux/Windows/macOS),
-    ou reproduz fluxos de rede (HTTP/HTTPS/HLS).
+    ou reproduz fluxos de rede (HTTP/HTTPS/HLS) com suporte a failover de múltiplas fontes.
     Bloqueia a execução direta de binários e scripts potencialmente perigosos por segurança,
     redirecionando para o gerenciador de arquivos (reveal_in_explorer).
     """
     try:
         # Suporte a URLs de streaming e transmissões ao vivo
         if file_path.startswith(("http://", "https://")):
-            if ".m3u8" in file_path:
-                for player in ["vlc", "mpv"]:
-                    if shutil.which(player):
-                        subprocess.Popen([player, file_path])
-                        return True
+            all_urls = [file_path]
+            if fallback_urls:
+                for u in fallback_urls:
+                    if u and u not in all_urls:
+                        all_urls.append(u)
+
+            # MPV suporta passar múltiplos links sequenciais para failover automático
+            if shutil.which("mpv"):
+                args = ["mpv"]
+                if title:
+                    args.append(f"--title={title}")
+                args.extend(all_urls)
+                subprocess.Popen(args)
+                return True
+
+            # VLC suporta abrir playlist temporária com múltiplas fontes
+            if shutil.which("vlc"):
+                if len(all_urls) > 1:
+                    import tempfile
+                    with tempfile.NamedTemporaryFile("w", suffix=".m3u8", delete=False, encoding="utf-8") as f:
+                        f.write("#EXTM3U\n")
+                        ch_title = title or "Canal Ao Vivo"
+                        for i, u in enumerate(all_urls, 1):
+                            f.write(f"#EXTINF:-1,{ch_title} (Fonte {i})\n{u}\n")
+                        tmp_playlist = f.name
+                    subprocess.Popen(["vlc", tmp_playlist])
+                    return True
+                else:
+                    subprocess.Popen(["vlc", file_path])
+                    return True
+
             if sys.platform == "win32":
                 os.startfile(file_path)
                 return True

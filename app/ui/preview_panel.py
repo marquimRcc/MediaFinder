@@ -284,6 +284,12 @@ class PreviewPanel(QFrame):
             self.lbl_date.setText(f"Categoria: {cat_name}")
             origin_name = "Canais FAST Ao Vivo" if cat == "iptv" else "Pluto TV Streaming"
             self.lbl_drive.setText(f"Origem: {origin_name}")
+            stream_urls = file_data.get("stream_urls") or []
+            if len(stream_urls) > 1:
+                self.lbl_res.setText(f"⚡ {len(stream_urls)} fontes disponíveis (Auto-Failover)")
+                self.lbl_res.setVisible(True)
+            else:
+                self.lbl_res.setVisible(False)
             summary_txt = file_data.get("summary", "")
             self.lbl_path.setText(f"Sinopse:\n{summary_txt}" if summary_txt else f"Stream:\n{file_path}")
 
@@ -450,7 +456,9 @@ class PreviewPanel(QFrame):
     def _on_open_file(self):
         if self.current_file_data:
             path = self.current_file_data.get("path", "")
-            if not open_file(path):
+            fallback_urls = self.current_file_data.get("stream_urls")
+            title = self.current_file_data.get("channel_name") or self.current_file_data.get("name")
+            if not open_file(path, fallback_urls=fallback_urls, title=title):
                 QMessageBox.warning(self, "Aviso", f"Não foi possível abrir o arquivo ou a unidade está desconectada:\n{path}")
 
     def _on_reveal_explorer(self):

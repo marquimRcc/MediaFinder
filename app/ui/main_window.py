@@ -409,6 +409,8 @@ class MainWindow(QMainWindow):
                     "drive": "FAST",
                     "mtime": 0,
                     "path": ch["stream_url"],
+                    "stream_urls": ch.get("stream_urls") or [ch["stream_url"]],
+                    "sources_meta": ch.get("sources_meta") or [],
                     "category": "iptv",
                     "is_live_stream": True,
                     "channel_id": ch["id"],

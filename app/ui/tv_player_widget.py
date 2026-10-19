@@ -26,6 +26,9 @@ class TVPlayerWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.current_file_path: Optional[str] = None
+        self._current_stream_urls: List[str] = []
+        self._current_stream_idx: int = 0
+        self._current_sources_meta: List[Dict[str, Any]] = []
         self._is_seeking = False
         self._is_fullscreen = False
         self._target_offset_ms = 0
@@ -172,6 +175,13 @@ class TVPlayerWidget(QWidget):
         self.btn_subtitle_track.setContextMenuPolicy(Qt.CustomContextMenu)
         self.btn_subtitle_track.customContextMenuRequested.connect(self.show_subtitle_menu)
         btns_layout.addWidget(self.btn_subtitle_track)
+
+        self.btn_source = QPushButton("🔄 Fonte (O)")
+        self.btn_source.setStyleSheet("padding: 5px 10px; font-size: 11px; color: #38BDF8; font-weight: 600;")
+        self.btn_source.setToolTip("Alternar fonte/link de transmissão do canal (Tecla O ou clique)")
+        self.btn_source.clicked.connect(self.cycle_stream_source)
+        self.btn_source.setVisible(False)
+        btns_layout.addWidget(self.btn_source)
 
         self.btn_mute_toggle = QPushButton("🔊")
         self.btn_mute_toggle.setStyleSheet("font-size: 13px; padding: 4px 6px; background: transparent; border: none;")
@@ -768,18 +778,99 @@ class TVPlayerWidget(QWidget):
     def _on_auto_skip_timeout(self):
         self.playback_finished.emit()
 
+    def _try_next_stream_source(self) -> bool:
+        """Tenta avançar automaticamente para a próxima fonte de stream em caso de falha."""
+        if not self._current_stream_urls or self._current_stream_idx + 1 >= len(self._current_stream_urls):
+            return False
+
+        self._current_stream_idx += 1
+        next_url = self._current_stream_urls[self._current_stream_idx]
+        self.current_file_path = next_url
+        total = len(self._current_stream_urls)
+        idx_disp = self._current_stream_idx + 1
+
+        meta_info = ""
+        if self._current_sources_meta and self._current_stream_idx < len(self._current_sources_meta):
+            q = self._current_sources_meta[self._current_stream_idx].get("qualidade")
+            if q:
+                meta_info = f" • {q}"
+
+        if hasattr(self, "btn_source"):
+            self.btn_source.setText(f"🔄 Fonte {idx_disp}/{total} (O)")
+            self.btn_source.setVisible(True)
+
+        self.show_track_osd("🔄 ALTERNANDO FONTE", f"Tentando Fonte {idx_disp}/{total}{meta_info}...")
+        self.player.stop()
+        self.player.setSource(QUrl(next_url))
+        self.player.play()
+        return True
+
+    def cycle_stream_source(self) -> bool:
+        """Alterna manualmente para a próxima fonte disponível do canal (tecla O ou botão)."""
+        if not self._current_stream_urls or len(self._current_stream_urls) <= 1:
+            self.show_track_osd("📡 FONTE ÚNICA", "Este canal possui apenas 1 fonte de transmissão.")
+            return False
+
+        self._current_stream_idx = (self._current_stream_idx + 1) % len(self._current_stream_urls)
+        next_url = self._current_stream_urls[self._current_stream_idx]
+        self.current_file_path = next_url
+        total = len(self._current_stream_urls)
+        idx_disp = self._current_stream_idx + 1
+
+        meta_info = ""
+        if self._current_sources_meta and self._current_stream_idx < len(self._current_sources_meta):
+            q = self._current_sources_meta[self._current_stream_idx].get("qualidade")
+            if q:
+                meta_info = f" • {q}"
+
+        if hasattr(self, "btn_source"):
+            self.btn_source.setText(f"🔄 Fonte {idx_disp}/{total} (O)")
+            self.btn_source.setVisible(True)
+
+        self.show_track_osd("📡 FONTE ALTERADA", f"Fonte {idx_disp}/{total}{meta_info}")
+        self.player.stop()
+        self.player.setSource(QUrl(next_url))
+        self.player.play()
+        return True
+
     def _on_player_error(self, error, error_string: str = ""):
-        """Trata erros nativos de decodificação/codec do QMediaPlayer."""
+        """Trata erros nativos de decodificação/codec do QMediaPlayer com tentativa de failover."""
         if error != QMediaPlayer.Error.NoError:
-            self.show_track_osd("⚠️ CODEC NÃO SUPORTADO", "Avançando para o próximo programa...")
+            if self._try_next_stream_source():
+                return
+            self.show_track_osd("⚠️ ERRO DE STREAM", "Todas as fontes falharam. Próximo canal...")
             self._trigger_auto_skip(1500)
 
-    def load_media(self, file_path: str, title: str = "", offset_seconds: int = 0, channel_number: Optional[int] = None, channel_name: str = "") -> None:
+    def load_media(
+        self,
+        file_path: str,
+        title: str = "",
+        offset_seconds: int = 0,
+        channel_number: Optional[int] = None,
+        channel_name: str = "",
+        fallback_urls: Optional[List[str]] = None,
+        sources_meta: Optional[List[Dict[str, Any]]] = None
+    ) -> None:
         """Carrega e inicia a reprodução do arquivo de vídeo ou áudio no ponto exato ao vivo."""
         self._skip_timer.stop()
         self.player.stop()
 
         self.current_file_path = file_path
+        self._current_stream_urls = [file_path]
+        if fallback_urls:
+            for u in fallback_urls:
+                if u and u not in self._current_stream_urls:
+                    self._current_stream_urls.append(u)
+        self._current_stream_idx = 0
+        self._current_sources_meta = sources_meta or []
+
+        if hasattr(self, "btn_source"):
+            if len(self._current_stream_urls) > 1:
+                self.btn_source.setText(f"🔄 Fonte 1/{len(self._current_stream_urls)} (O)")
+                self.btn_source.setVisible(True)
+            else:
+                self.btn_source.setVisible(False)
+
         self.lbl_now_playing.setText(title or os.path.basename(file_path))
         self._target_offset_ms = max(0, int(offset_seconds * 1000))
         self._seek_applied = False
@@ -836,6 +927,8 @@ class TVPlayerWidget(QWidget):
         if status == QMediaPlayer.MediaStatus.EndOfMedia:
             self.playback_finished.emit()
         elif status == QMediaPlayer.MediaStatus.InvalidMedia:
+            if self._try_next_stream_source():
+                return
             self.show_track_osd("⚠️ FORMATO INCOMPATÍVEL", "Avançando para o próximo programa...")
             self._trigger_auto_skip(1500)
 
@@ -878,7 +971,8 @@ class TVPlayerWidget(QWidget):
     def _open_in_external_player(self):
         if self.current_file_path:
             self.player.pause()
-            open_file(self.current_file_path)
+            title = self.lbl_now_playing.text()
+            open_file(self.current_file_path, fallback_urls=self._current_stream_urls, title=title)
 
     def toggle_fullscreen(self):
         self._is_fullscreen = not self._is_fullscreen

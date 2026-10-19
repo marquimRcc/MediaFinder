@@ -16,28 +16,39 @@ logger = logging.getLogger("mediafinder.iptv")
 # Fontes comunitárias pré-configuradas e testadas
 IPTV_SOURCES: List[Dict[str, Any]] = [
     {
+        "id": "saimo_br",
+        "name": "🇧🇷 Saimo TV Brasil (~400 canais curados)",
+        "desc": "Canais abertos, notícias, esportes, variedades e filmes com múltiplas fontes e alta estabilidade",
+        "url": "https://saimo-canais.pages.dev/catalogo.txt",
+        "format": "saimo",
+    },
+    {
         "id": "github_br",
         "name": "🇧🇷 GitHub iptv-org (Brasil - ~260 canais únicos)",
         "desc": "Emissoras abertas, esportes, notícias e entretenimento de todo o Brasil (sem duplicar Pluto TV)",
         "url": "https://iptv-org.github.io/iptv/countries/br.m3u",
+        "format": "m3u",
     },
     {
         "id": "github_movies",
         "name": "🎬 GitHub iptv-org (Filmes 24h - ~460 canais únicos)",
         "desc": "Transmissões contínuas de longas-metragens e cinema",
         "url": "https://iptv-org.github.io/iptv/categories/movies.m3u",
+        "format": "m3u",
     },
     {
         "id": "fast_essentials",
         "name": "⚡ Canais FAST (Essenciais - 12 canais)",
         "desc": "Canais de alta estabilidade (Record News, Cultura, Futura, etc.)",
         "url": None,
+        "format": "fast",
     },
     {
         "id": "custom",
         "name": "➕ Minha Lista M3U (Personalizada)",
         "desc": "Lista personalizada configurada pelo usuário (URL web ou arquivo local)",
         "url": None,
+        "format": "auto",
     }
 ]
 
@@ -247,7 +258,7 @@ class IPTVService:
         self.signals = IPTVSignalBridge()
         self._cache_dir = self._get_cache_dir()
         self._settings_file = self._cache_dir / "iptv_settings.json"
-        self._active_source_id = "github_br"
+        self._active_source_id = "saimo_br"
         self._custom_url_or_path = ""
         self._custom_name = "Minha Lista M3U"
         self._channels: List[Dict[str, Any]] = []
@@ -277,7 +288,7 @@ class IPTVService:
             try:
                 with open(self._settings_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                self._active_source_id = data.get("active_source", "github_br")
+                self._active_source_id = data.get("active_source", "saimo_br")
                 self._custom_url_or_path = data.get("custom_url_or_path", "")
                 self._custom_name = data.get("custom_name", "Minha Lista M3U")
             except Exception as e:
@@ -343,7 +354,10 @@ class IPTVService:
             else:
                 return False, 0, "Caminho de arquivo inválido ou protocolo não suportado (use http/https ou caminho local)."
 
-            parsed_channels = self.parse_m3u_content(m3u_text, default_source=name)
+            if "canal:" in m3u_text[:4000].lower():
+                parsed_channels = self.parse_saimo_catalog(m3u_text, default_source=name)
+            else:
+                parsed_channels = self.parse_m3u_content(m3u_text, default_source=name)
             if not parsed_channels:
                 return False, 0, "Nenhum canal com URL válida foi encontrado na lista M3U."
 
@@ -399,7 +413,10 @@ class IPTVService:
             with urllib.request.urlopen(req, timeout=12) as resp:
                 text = resp.read().decode("utf-8", errors="ignore")
 
-            parsed = self.parse_m3u_content(text, default_source="Geral")
+            if source_meta.get("format") == "saimo" or source_id == "saimo_br" or "canal:" in text[:4000].lower():
+                parsed = self.parse_saimo_catalog(text, default_source="Geral")
+            else:
+                parsed = self.parse_m3u_content(text, default_source="Geral")
             if parsed:
                 self._save_cache_for_source(source_id, parsed)
                 if self._active_source_id == source_id:
@@ -436,7 +453,7 @@ class IPTVService:
 
         # 2. Fonte: FAST Essenciais
         if source_id == "fast_essentials":
-            self._channels = list(DEFAULT_FAST_CHANNELS)
+            self._channels = self.deduplicate_channels(list(DEFAULT_FAST_CHANNELS))
             self._save_cache_for_source(source_id, self._channels)
             return
 
@@ -452,13 +469,13 @@ class IPTVService:
                     if ok:
                         return
                 else:
-                    self._channels = list(DEFAULT_FAST_CHANNELS)
+                    self._channels = self.deduplicate_channels(list(DEFAULT_FAST_CHANNELS))
                     threading.Thread(
                         target=lambda: self.set_custom_source(self._custom_url_or_path, self._custom_name),
                         daemon=True
                     ).start()
                     return
-            self._channels = list(DEFAULT_FAST_CHANNELS)
+            self._channels = self.deduplicate_channels(list(DEFAULT_FAST_CHANNELS))
             return
 
         # 4. Fontes remotas da comunidade (github_br, github_movies, etc.)
@@ -472,7 +489,7 @@ class IPTVService:
                         return
                 except Exception:
                     pass
-            self._channels = list(DEFAULT_FAST_CHANNELS)
+            self._channels = self.deduplicate_channels(list(DEFAULT_FAST_CHANNELS))
             self._start_background_fetch(source_id)
             return
 
@@ -487,7 +504,7 @@ class IPTVService:
                         return
                 except Exception:
                     pass
-            self._channels = list(DEFAULT_FAST_CHANNELS)
+            self._channels = self.deduplicate_channels(list(DEFAULT_FAST_CHANNELS))
 
     def _save_cache_for_source(self, source_id: str, channels: List[Dict[str, Any]]):
         try:
@@ -635,8 +652,16 @@ class IPTVService:
         return re.sub(r"[^\w\s]", "", cl).strip()
 
     @classmethod
+    def sanitize_stream_url(cls, url: str) -> str:
+        """Converte streams Xtream de .ts para manifesto .m3u8 para maior estabilidade."""
+        url = url.strip()
+        if url.endswith(".ts") and "/live/" in url:
+            return url[:-3] + ".m3u8"
+        return url
+
+    @classmethod
     def deduplicate_channels(cls, channels: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Remove canais duplicados mantendo sempre a versão com maior resolução/qualidade (HD prioritário)."""
+        """Remove canais duplicados mantendo sempre a versão com maior resolução/qualidade e unindo fallbacks."""
         from collections import defaultdict
         groups = defaultdict(list)
         for ch in channels:
@@ -647,9 +672,31 @@ class IPTVService:
         for key, ch_list in groups.items():
             if len(ch_list) > 1:
                 ch_list.sort(key=cls.get_channel_quality_score, reverse=True)
-                deduped.append(ch_list[0])
+                best_ch = dict(ch_list[0])
+                merged_urls = list(best_ch.get("stream_urls") or ([best_ch.get("stream_url")] if best_ch.get("stream_url") else []))
+                merged_meta = list(best_ch.get("sources_meta") or [])
+                for other in ch_list[1:]:
+                    other_urls = other.get("stream_urls") or ([other.get("stream_url")] if other.get("stream_url") else [])
+                    for u in other_urls:
+                        if u and u not in merged_urls:
+                            merged_urls.append(u)
+                    other_meta = other.get("sources_meta") or []
+                    for m in other_meta:
+                        if m.get("url") and not any(x.get("url") == m["url"] for x in merged_meta):
+                            merged_meta.append(m)
+
+                best_ch["stream_urls"] = merged_urls
+                best_ch["sources_meta"] = merged_meta
+                if len(merged_urls) > 1:
+                    best_ch["summary"] = f"Transmissão ao vivo • {len(merged_urls)} fontes disponíveis • Categoria: {best_ch.get('category', 'Geral')}."
+                deduped.append(best_ch)
             else:
-                deduped.append(ch_list[0])
+                ch = dict(ch_list[0])
+                if not ch.get("stream_urls"):
+                    ch["stream_urls"] = [ch["stream_url"]] if ch.get("stream_url") else []
+                if not ch.get("sources_meta"):
+                    ch["sources_meta"] = [{"url": ch["stream_url"]}] if ch.get("stream_url") else []
+                deduped.append(ch)
         return deduped
 
     def get_channels(self, category: Optional[str] = None, query: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -689,8 +736,9 @@ class IPTVService:
                 cats.add(cat.strip())
         return sorted(list(cats))
 
-    def normalize_category(self, raw_cat: str, default: str = "Geral") -> str:
-        """Traduz e padroniza títulos de grupos M3U em categorias legíveis em português."""
+    @classmethod
+    def normalize_category_static(cls, raw_cat: str, default: str = "Geral") -> str:
+        """Traduz e padroniza títulos de grupos M3U ou catálogos em categorias legíveis em português."""
         if not raw_cat or not raw_cat.strip():
             return default
 
@@ -702,6 +750,129 @@ class IPTVService:
 
         first = parts[0]
         return first[:1].upper() + first[1:]
+
+    def normalize_category(self, raw_cat: str, default: str = "Geral") -> str:
+        """Compatibilidade de instância para tradução de categoria."""
+        return self.normalize_category_static(raw_cat, default=default)
+
+    @classmethod
+    def parse_saimo_catalog(
+        cls,
+        text: str,
+        default_source: str = "Geral",
+        exclude_pluto: bool = True
+    ) -> List[Dict[str, Any]]:
+        """Parser para catálogo Saimo TV (formato chave: valor com múltiplas fontes por canal)."""
+        channels: List[Dict[str, Any]] = []
+        current_ch: Optional[Dict[str, Any]] = None
+        current_source: Optional[Dict[str, Any]] = None
+
+        def _finish_channel():
+            nonlocal current_ch, current_source
+            if not current_ch:
+                return
+            if current_source:
+                current_ch["sources"].append(current_source)
+                current_source = None
+
+            raw_name = current_ch.get("name", "").strip()
+            sources = current_ch.get("sources", [])
+            valid_sources = [s for s in sources if s.get("url") and s["url"].startswith(("http://", "https://"))]
+
+            if not raw_name or not valid_sources:
+                current_ch = None
+                return
+
+            stream_urls = []
+            sources_meta = []
+            for s in valid_sources:
+                clean_url = cls.sanitize_stream_url(s["url"])
+                if clean_url not in stream_urls:
+                    stream_urls.append(clean_url)
+                    s_meta = dict(s)
+                    s_meta["url"] = clean_url
+                    sources_meta.append(s_meta)
+
+            if not stream_urls:
+                current_ch = None
+                return
+
+            primary_url = stream_urls[0]
+            ch_id = f"saimo_{re.sub(r'[^a-zA-Z0-9_]', '', raw_name.lower())}"
+
+            if exclude_pluto and cls.is_pluto_tv_channel(raw_name, primary_url, ch_id):
+                current_ch = None
+                return
+
+            raw_cat = current_ch.get("category") or default_source
+            cat = cls.normalize_category_static(raw_cat, default=default_source)
+            logo = current_ch.get("logo", "")
+
+            channels.append({
+                "id": ch_id,
+                "name": raw_name,
+                "number": len(channels) + 1,
+                "category": cat,
+                "logo": logo,
+                "stream_url": primary_url,
+                "stream_urls": stream_urls,
+                "sources_meta": sources_meta,
+                "summary": f"Transmissão ao vivo • {len(stream_urls)} fontes disponíveis • Categoria: {cat}.",
+                "country": "BR"
+            })
+            current_ch = None
+
+        for line in text.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+
+            if ":" not in line:
+                continue
+
+            key, _, val = line.partition(":")
+            key = key.strip().lower()
+            val = val.strip()
+
+            if key == "canal":
+                _finish_channel()
+                current_ch = {
+                    "name": val,
+                    "category": default_source,
+                    "logo": "",
+                    "sources": []
+                }
+                current_source = None
+            elif current_ch is not None:
+                if key in ("categoria", "group", "grupo"):
+                    current_ch["category"] = val
+                elif key == "logo":
+                    current_ch["logo"] = val
+                elif key == "fonte":
+                    if current_source:
+                        current_ch["sources"].append(current_source)
+                    current_source = {
+                        "url": val,
+                        "qualidade": "",
+                        "referer": "",
+                        "agente": "",
+                        "chave": "",
+                        "nome": ""
+                    }
+                elif current_source is not None:
+                    if key in ("qualidade", "quality"):
+                        current_source["qualidade"] = val
+                    elif key in ("referer", "referrer"):
+                        current_source["referer"] = val
+                    elif key in ("agente", "user-agent", "agent"):
+                        current_source["agente"] = val
+                    elif key in ("chave", "clearkey", "key"):
+                        current_source["chave"] = val
+                    elif key in ("nome", "name"):
+                        current_source["nome"] = val
+
+        _finish_channel()
+        return cls.deduplicate_channels(channels)
 
     def parse_m3u_content(self, m3u_text: str, default_source: str = "Geral", exclude_pluto: bool = True) -> List[Dict[str, Any]]:
         """Parser robusto e otimizado para listas M3U e M3UPlus com deduplicação automática."""
@@ -717,7 +888,7 @@ class IPTVService:
                 current_meta = self._parse_extinf_line(line)
             elif not line.startswith("#") and (line.startswith("http://") or line.startswith("https://")):
                 if current_meta:
-                    stream_url = line
+                    stream_url = self.sanitize_stream_url(line)
                     ch_id = current_meta.get("tvg-id") or f"iptv_{len(channels)+1}_{int(time.time())}"
                     raw_name = current_meta.get("title") or current_meta.get("tvg-name") or f"Canal {len(channels)+1}"
 
@@ -743,6 +914,8 @@ class IPTVService:
                         "category": group,
                         "logo": logo,
                         "stream_url": stream_url,
+                        "stream_urls": [stream_url],
+                        "sources_meta": [{"url": stream_url, "qualidade": ""}],
                         "summary": f"Transmissão ao vivo • Categoria: {group}.",
                         "country": current_meta.get("tvg-country", "")
                     })

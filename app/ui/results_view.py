@@ -175,14 +175,22 @@ class ResultsTableView(QTableWidget):
         f = self.get_selected_file()
         if f:
             self.file_activated.emit(f)
-            open_file(f.get("path", ""))
+            open_file(
+                f.get("path", ""),
+                fallback_urls=f.get("stream_urls"),
+                title=f.get("channel_name") or f.get("name")
+            )
 
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() in (Qt.Key_Return, Qt.Key_Enter):
             selected = self.get_selected_files()
             if selected:
                 for f in selected:
-                    open_file(f.get("path", ""))
+                    open_file(
+                        f.get("path", ""),
+                        fallback_urls=f.get("stream_urls"),
+                        title=f.get("channel_name") or f.get("name")
+                    )
                 event.accept()
                 return
         elif event.key() == Qt.Key_Delete:

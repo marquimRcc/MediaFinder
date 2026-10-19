@@ -361,13 +361,21 @@ class MediaGridView(QListWidget):
         f = item.data(Qt.UserRole)
         if f:
             self.file_activated.emit(f)
-            open_file(f.get("path", ""))
+            open_file(
+                f.get("path", ""),
+                fallback_urls=f.get("stream_urls"),
+                title=f.get("channel_name") or f.get("name")
+            )
 
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() in (Qt.Key_Return, Qt.Key_Enter):
             f = self.get_selected_file()
             if f:
-                open_file(f.get("path", ""))
+                open_file(
+                    f.get("path", ""),
+                    fallback_urls=f.get("stream_urls"),
+                    title=f.get("channel_name") or f.get("name")
+                )
                 event.accept()
                 return
         elif event.key() == Qt.Key_Delete:

@@ -248,10 +248,11 @@ class TVModeWindow(QMainWindow):
         QShortcut(QKeySequence("-"), self, activated=lambda: self.player_widget.set_volume_relative(-5))
         QShortcut(QKeySequence("M"), self, activated=self.player_widget.toggle_mute)
 
-        # Alternar Faixa de Áudio (Dual Áudio) e Legendas
+        # Alternar Faixa de Áudio (Dual Áudio), Legendas e Fontes
         QShortcut(QKeySequence("A"), self, activated=self.player_widget.cycle_audio_track)
         QShortcut(QKeySequence("S"), self, activated=self.player_widget.cycle_subtitle_track)
         QShortcut(QKeySequence("L"), self, activated=self.player_widget.cycle_subtitle_track)
+        QShortcut(QKeySequence("O"), self, activated=self.player_widget.cycle_stream_source)
 
         # Atalhos Numéricos Diretos de Canais (1 a 9)
         for num in range(1, 10):
@@ -573,7 +574,9 @@ class TVModeWindow(QMainWindow):
                 title=f"{channel.icon} CH{channel.number:02d} | {current_item.full_display_title}",
                 offset_seconds=offset,
                 channel_number=channel.number,
-                channel_name=channel.name
+                channel_name=channel.name,
+                fallback_urls=current_item.file_data.get("stream_urls"),
+                sources_meta=current_item.file_data.get("sources_meta")
             )
         else:
             self.lbl_now_title.setText("Nenhuma mídia indexada para este canal")
@@ -591,7 +594,9 @@ class TVModeWindow(QMainWindow):
                 title=f"{channel.icon} CH{channel.number:02d} | {item.full_display_title}",
                 offset_seconds=0,
                 channel_number=channel.number,
-                channel_name=channel.name
+                channel_name=channel.name,
+                fallback_urls=item.file_data.get("stream_urls"),
+                sources_meta=item.file_data.get("sources_meta")
             )
 
     def _play_next_scheduled_item(self):
@@ -620,7 +625,9 @@ class TVModeWindow(QMainWindow):
             title=f"{channel.icon} CH{channel.number:02d} | {next_item.full_display_title}",
             offset_seconds=0,
             channel_number=channel.number,
-            channel_name=channel.name
+            channel_name=channel.name,
+            fallback_urls=next_item.file_data.get("stream_urls"),
+            sources_meta=next_item.file_data.get("sources_meta")
         )
 
     def _next_channel(self):

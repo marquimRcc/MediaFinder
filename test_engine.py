@@ -563,8 +563,90 @@ https://exemplo.com/hbo.m3u8
             if os.path.exists(temp_m3u_path):
                 os.remove(temp_m3u_path)
 
-        # Restaura para GitHub Brasil
-        iptv_svc.set_active_source("github_br")
+        # Teste do catálogo Saimo TV (Parsing, Sanitização de .ts para .m3u8 e Extração de Múltiplas Fontes)
+        sample_saimo_text = """# SAIMO TV — LISTA DE CANAIS
+canal: Canal Teste Saimo
+categoria: Filmes
+logo: https://img.exemplo.com/canal.png
+
+fonte: https://stream1.exemplo.com/live/user/pass/100.ts
+qualidade: FHD · 1920x1080
+fonte: https://stream2.exemplo.com/live/user/pass/100.m3u8
+qualidade: HD · 1280x720
+referer: https://site.exemplo.com/
+agente: Mozilla/5.0 TestAgent
+chave: 0123456789abcdef:fedcba9876543210
+
+canal: Canal Secundário
+categoria: Notícias
+fonte: https://stream.noticias.com/live.m3u8
+"""
+        saimo_parsed = iptv_svc.parse_saimo_catalog(sample_saimo_text)
+        assert len(saimo_parsed) == 2, f"Esperava 2 canais, obteve {len(saimo_parsed)}"
+        ch1 = saimo_parsed[0]
+        assert ch1["name"] == "Canal Teste Saimo"
+        assert ch1["category"] == "Filmes"
+        assert ch1["logo"] == "https://img.exemplo.com/canal.png"
+        assert len(ch1["stream_urls"]) == 2, "Deveria conter 2 fontes de fallback"
+        assert ch1["stream_urls"][0].endswith(".m3u8"), "Deveria ter convertido link .ts para .m3u8"
+        assert ch1["sources_meta"][1]["referer"] == "https://site.exemplo.com/"
+        assert ch1["sources_meta"][1]["agente"] == "Mozilla/5.0 TestAgent"
+        assert ch1["sources_meta"][1]["chave"] == "0123456789abcdef:fedcba9876543210"
+
+        # Teste de importação de lista Saimo (.txt) em arquivo temporário
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as tf:
+            tf.write(sample_saimo_text)
+            temp_saimo_path = tf.name
+
+        try:
+            ok, count, msg = iptv_svc.set_custom_source(temp_saimo_path, "Lista Saimo Custom")
+            assert ok is True
+            assert count == 2
+            custom_saimo_chans = iptv_svc.set_active_source("custom")
+            assert len(custom_saimo_chans) == 2
+            assert custom_saimo_chans[0]["name"] == "Canal Teste Saimo"
+        finally:
+            if os.path.exists(temp_saimo_path):
+                os.remove(temp_saimo_path)
+
+        # Teste do mecanismo de Auto-Failover no TVPlayerWidget
+        from app.ui.tv_player_widget import TVPlayerWidget
+        widget_player = TVPlayerWidget()
+        widget_player.load_media(
+            file_path="https://link1.falha.com/stream.m3u8",
+            title="Canal Failover Test",
+            fallback_urls=["https://link1.falha.com/stream.m3u8", "https://link2.reserva.com/stream.m3u8", "https://link3.reserva.com/stream.m3u8"],
+            sources_meta=[{"qualidade": "FHD"}, {"qualidade": "HD"}, {"qualidade": "SD"}]
+        )
+        assert len(widget_player._current_stream_urls) == 3
+        assert widget_player._current_stream_idx == 0
+        assert not widget_player.btn_source.isHidden(), "btn_source deveria estar visível quando há múltiplas fontes"
+        assert "1/3" in widget_player.btn_source.text()
+
+        # Simula acionamento do failover automático (fonte primária falha)
+        failover_ok = widget_player._try_next_stream_source()
+        assert failover_ok is True
+        assert widget_player._current_stream_idx == 1
+        assert widget_player.current_file_path == "https://link2.reserva.com/stream.m3u8"
+        assert "2/3" in widget_player.btn_source.text()
+
+        # Simula troca manual de fonte (tecla O / botão)
+        cycled = widget_player.cycle_stream_source()
+        assert cycled is True
+        assert widget_player._current_stream_idx == 2
+        assert widget_player.current_file_path == "https://link3.reserva.com/stream.m3u8"
+        assert "3/3" in widget_player.btn_source.text()
+
+        # Cicla novamente e dá a volta para a fonte 1
+        widget_player.cycle_stream_source()
+        assert widget_player._current_stream_idx == 0
+        assert widget_player.current_file_path == "https://link1.falha.com/stream.m3u8"
+
+        widget_player.stop()
+        widget_player.deleteLater()
+
+        # Restaura para GitHub Brasil ou Saimo TV
+        iptv_svc.set_active_source("saimo_br")
 
         # Teste do diálogo de importação M3U
         from app.ui.iptv_dialog import ImportM3UDialog
@@ -572,7 +654,7 @@ https://exemplo.com/hbo.m3u8
         assert dlg_iptv is not None
         dlg_iptv.close()
 
-        print("✓ Todos os componentes, streaming HTTP 206, metadados IMDb, Pluto TV, IPTV Multi-fontes M3U, diálogos e IndexWorker validados com sucesso!")
+        print("✓ Todos os componentes, streaming HTTP 206, metadados IMDb, Pluto TV, Saimo TV Curado, Auto-Failover de Streams, IPTV Multi-fontes M3U, diálogos e IndexWorker validados com sucesso!")
     finally:
         try:
             if os.path.exists(ui_db_path):
