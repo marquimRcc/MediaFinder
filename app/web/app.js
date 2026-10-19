@@ -18,6 +18,9 @@ const App = {
   selectedPlutoCategory: 'all',
   cachedPlutoChannels: [],
   cachedPlutoCategories: [],
+  cachedIptvChannels: [],
+  cachedIptvCategories: [],
+  selectedIptvCategory: 'all',
   searchQuery: '',
   catalogReqId: 0,
   kidsReqId: 0,
@@ -36,6 +39,11 @@ const App = {
     this.registerPWA();
     this.setupEventListeners();
     await this.loadProfiles();
+
+    // Inicializa controles de carrossel existentes no HTML (scroll paddles)
+    document.querySelectorAll('.carousel-wrapper').forEach(wrapper => {
+      this.setupCarouselPaddles(wrapper);
+    });
 
     // Recupera perfil salvo no localStorage
     const savedProfileId = localStorage.getItem('mf_profile_id');
@@ -86,6 +94,12 @@ const App = {
     }
 
     this.updateNavProfileChip();
+
+    setTimeout(() => {
+      document.querySelectorAll('.carousel-wrapper').forEach(wrapper => {
+        this.setupCarouselPaddles(wrapper);
+      });
+    }, 200);
   },
 
   updateNavProfileChip() {
@@ -279,6 +293,72 @@ const App = {
     }
   },
 
+  setupCarouselPaddles(wrapper) {
+    if (!wrapper) return;
+    const paddleLeft = wrapper.querySelector('.carousel-paddle.paddle-left');
+    const paddleRight = wrapper.querySelector('.carousel-paddle.paddle-right');
+    const row = wrapper.querySelector('.carousel-row');
+    if (!row || !paddleLeft || !paddleRight) return;
+
+    const updatePaddleState = () => {
+      const scrollLeft = row.scrollLeft;
+      const maxScroll = row.scrollWidth - row.clientWidth;
+
+      // Ativa seta esquerda se rolou mais de 6px do início
+      paddleLeft.classList.toggle('is-active', scrollLeft > 6);
+      // Ativa seta direita se ainda houver conteúdo a rolar
+      paddleRight.classList.toggle('is-active', maxScroll > 6 && scrollLeft < maxScroll - 6);
+    };
+
+    paddleLeft.onclick = (e) => {
+      e.stopPropagation();
+      const step = Math.max(280, Math.floor(row.clientWidth * 0.75));
+      row.scrollBy({ left: -step, behavior: 'smooth' });
+    };
+
+    paddleRight.onclick = (e) => {
+      e.stopPropagation();
+      const step = Math.max(280, Math.floor(row.clientWidth * 0.75));
+      row.scrollBy({ left: step, behavior: 'smooth' });
+    };
+
+    row.addEventListener('scroll', updatePaddleState, { passive: true });
+    window.addEventListener('resize', updatePaddleState, { passive: true });
+
+    // Observa inserções dinâmicas de cards no carrossel para atualizar os botões
+    if (window.MutationObserver) {
+      const obs = new MutationObserver(() => updatePaddleState());
+      obs.observe(row, { childList: true, subtree: false });
+    }
+
+    // Inicialização com pequeno delay para aguardar renderização do layout
+    setTimeout(updatePaddleState, 150);
+  },
+
+  createCarouselWrapper(rowElement) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'carousel-wrapper';
+
+    const paddleLeft = document.createElement('button');
+    paddleLeft.className = 'carousel-paddle paddle-left';
+    paddleLeft.setAttribute('aria-label', 'Rolar para a esquerda');
+    paddleLeft.setAttribute('title', 'Anterior');
+    paddleLeft.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>';
+
+    const paddleRight = document.createElement('button');
+    paddleRight.className = 'carousel-paddle paddle-right';
+    paddleRight.setAttribute('aria-label', 'Rolar para a direita');
+    paddleRight.setAttribute('title', 'Próximo');
+    paddleRight.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>';
+
+    wrapper.appendChild(paddleLeft);
+    wrapper.appendChild(rowElement);
+    wrapper.appendChild(paddleRight);
+
+    this.setupCarouselPaddles(wrapper);
+    return wrapper;
+  },
+
   escapeHtml(str) {
     if (!str) return '';
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -306,6 +386,9 @@ const App = {
   async loadCatalog() {
     if (this.selectedCategory === 'pluto') {
       return this.loadPlutoCatalog();
+    }
+    if (this.selectedCategory === 'iptv') {
+      return this.loadIptvCatalog();
     }
 
     const plutoContainer = document.getElementById('pluto-categories-container');
@@ -521,8 +604,9 @@ const App = {
               row.appendChild(this.createPlutoCard(ch));
             });
 
+            const rowWrapper = this.createCarouselWrapper(row);
             sec.appendChild(titleRow);
-            sec.appendChild(row);
+            sec.appendChild(rowWrapper);
             plutoContainer.appendChild(sec);
           }
         }
@@ -547,6 +631,230 @@ const App = {
     } catch (e) {
       console.error('Erro ao carregar canais Pluto TV:', e);
     }
+  },
+
+  renderIptvCategoryPills() {
+    const pillsContainer = document.getElementById('pluto-category-pills');
+    if (!pillsContainer) return;
+    pillsContainer.innerHTML = '';
+
+    const allBtn = document.createElement('button');
+    allBtn.className = `pill pluto-subpill ${this.selectedIptvCategory === 'all' ? 'active' : ''}`;
+    allBtn.setAttribute('data-iptv-cat', 'all');
+    allBtn.textContent = '🇧🇷 Todos os Canais';
+    allBtn.onclick = () => this.filterIptvByCategory('all');
+    pillsContainer.appendChild(allBtn);
+
+    this.cachedIptvCategories.forEach(cat => {
+      const btn = document.createElement('button');
+      btn.className = `pill pluto-subpill ${this.selectedIptvCategory === cat ? 'active' : ''}`;
+      btn.setAttribute('data-iptv-cat', cat);
+      btn.textContent = `📺 ${cat}`;
+      btn.onclick = () => this.filterIptvByCategory(cat);
+      pillsContainer.appendChild(btn);
+    });
+  },
+
+  filterIptvByCategory(cat) {
+    this.selectedIptvCategory = cat;
+    document.querySelectorAll('#pluto-category-pills .pill').forEach(p => {
+      if (p.getAttribute('data-iptv-cat') === cat) {
+        p.classList.add('active');
+        p.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      } else {
+        p.classList.remove('active');
+      }
+    });
+    this.loadIptvCatalog();
+  },
+
+  async loadIptvCatalog() {
+    try {
+      const isSearching = !!(this.searchQuery && this.searchQuery.trim());
+      const heroSection = document.getElementById('hero-continue');
+      const recentSection = document.getElementById('carousel-recent')?.closest('section');
+      const plutoContainer = document.getElementById('pluto-categories-container');
+      const plutoPills = document.getElementById('pluto-category-pills');
+      const catalogSection = document.getElementById('catalog-section');
+      const catalogTitle = document.getElementById('catalog-section-title');
+
+      if (heroSection) heroSection.style.display = 'none';
+      if (recentSection) recentSection.style.display = 'none';
+      if (plutoPills) plutoPills.style.display = 'flex';
+
+      if (!this.cachedIptvChannels.length) {
+        const res = await fetch('/api/iptv/channels');
+        const data = await res.json();
+        this.cachedIptvChannels = data.channels || [];
+        this.cachedIptvCategories = data.categories || [];
+        this.renderIptvCategoryPills();
+      }
+
+      let channels = this.cachedIptvChannels;
+
+      if (isSearching) {
+        if (plutoContainer) plutoContainer.style.display = 'none';
+        if (catalogSection) catalogSection.style.display = 'block';
+
+        const q = this.searchQuery.trim().toLowerCase();
+        const filtered = channels.filter(c =>
+          (c.name && c.name.toLowerCase().includes(q)) ||
+          (c.category && c.category.toLowerCase().includes(q)) ||
+          (c.summary && c.summary.toLowerCase().includes(q))
+        );
+
+        if (catalogTitle) catalogTitle.textContent = `🇧🇷 Saimo TV Brasil: ${filtered.length} canais para "${this.searchQuery}"`;
+        const container = document.getElementById('catalog-grid');
+        container.innerHTML = '';
+
+        if (filtered.length === 0) {
+          container.innerHTML = `
+            <div class="search-empty-state">
+              <div class="empty-icon">📺</div>
+              <div class="empty-title">Nenhum canal encontrado para "${this.escapeHtml(this.searchQuery)}"</div>
+              <div class="empty-desc">Tente buscar por Globo, SBT, Record, Band, ESPN, etc.</div>
+              <button class="btn-clear-search" id="btn-iptv-empty-clear">Limpar busca e ver canais</button>
+            </div>
+          `;
+          document.getElementById('btn-iptv-empty-clear')?.addEventListener('click', () => this.clearSearch());
+          return;
+        }
+
+        filtered.forEach(ch => {
+          container.appendChild(this.createIptvCard(ch));
+        });
+        return;
+      }
+
+      // Se categoria for 'all': exibe carrosséis temáticos por categoria com scroll paddles estilo cápsula
+      if (this.selectedIptvCategory === 'all') {
+        if (catalogSection) catalogSection.style.display = 'none';
+        if (plutoContainer) {
+          plutoContainer.style.display = 'block';
+          plutoContainer.innerHTML = '';
+
+          const grouped = {};
+          this.cachedIptvCategories.forEach(cat => {
+            grouped[cat] = [];
+          });
+          channels.forEach(ch => {
+            const cat = ch.category || 'Geral';
+            if (!grouped[cat]) grouped[cat] = [];
+            grouped[cat].push(ch);
+          });
+
+          for (const [catName, catChannels] of Object.entries(grouped)) {
+            if (!catChannels || catChannels.length === 0) continue;
+
+            const sec = document.createElement('section');
+            sec.className = 'pluto-category-section';
+
+            const titleRow = document.createElement('div');
+            titleRow.className = 'section-title';
+
+            const titleSpan = document.createElement('span');
+            titleSpan.textContent = `📺 ${catName} (${catChannels.length})`;
+
+            const seeAllBtn = document.createElement('button');
+            seeAllBtn.className = 'btn-see-all';
+            seeAllBtn.textContent = 'Ver todos ›';
+            seeAllBtn.onclick = () => this.filterIptvByCategory(catName);
+
+            titleRow.appendChild(titleSpan);
+            titleRow.appendChild(seeAllBtn);
+
+            const row = document.createElement('div');
+            row.className = 'carousel-row';
+            catChannels.forEach(ch => {
+              row.appendChild(this.createIptvCard(ch));
+            });
+
+            const rowWrapper = this.createCarouselWrapper(row);
+            sec.appendChild(titleRow);
+            sec.appendChild(rowWrapper);
+            plutoContainer.appendChild(sec);
+          }
+        }
+        return;
+      }
+
+      // Se categoria específica selecionada:
+      if (plutoContainer) plutoContainer.style.display = 'none';
+      if (catalogSection) catalogSection.style.display = 'block';
+
+      const filtered = channels.filter(c => (c.category || '').toLowerCase() === this.selectedIptvCategory.toLowerCase());
+      if (catalogTitle) {
+        catalogTitle.textContent = `📺 ${this.selectedIptvCategory} (${filtered.length} canais ao vivo)`;
+      }
+
+      const container = document.getElementById('catalog-grid');
+      container.innerHTML = '';
+      filtered.forEach(ch => {
+        container.appendChild(this.createIptvCard(ch));
+      });
+
+    } catch (e) {
+      console.error('Erro ao carregar canais Saimo TV Brasil:', e);
+    }
+  },
+
+  createIptvCard(channel) {
+    const card = document.createElement('div');
+    card.className = 'media-card';
+    card.onclick = () => this.openIptvDetails(channel);
+
+    const poster = document.createElement('div');
+    poster.className = 'media-poster';
+
+    const fallbackIcon = document.createElement('div');
+    fallbackIcon.className = 'media-poster-fallback';
+    fallbackIcon.textContent = '📺';
+
+    const imgSrc = channel.logo || channel.thumbnail;
+    if (imgSrc) {
+      const img = document.createElement('img');
+      img.src = imgSrc;
+      img.alt = channel.name;
+      img.className = 'pluto-logo';
+      img.loading = 'lazy';
+      img.onerror = () => {
+        img.style.display = 'none';
+        fallbackIcon.style.display = 'block';
+      };
+      poster.appendChild(img);
+      fallbackIcon.style.display = 'none';
+    }
+    poster.appendChild(fallbackIcon);
+
+    const liveBadge = document.createElement('span');
+    liveBadge.className = 'badge-live-card';
+    liveBadge.textContent = '🔴 AO VIVO';
+    poster.appendChild(liveBadge);
+
+    if (channel.number) {
+      const chBadge = document.createElement('span');
+      chBadge.className = 'badge-channel-card';
+      chBadge.textContent = `CH ${channel.number}`;
+      poster.appendChild(chBadge);
+    }
+
+    const title = document.createElement('div');
+    title.className = 'media-card-title';
+    title.textContent = channel.name;
+
+    const meta = document.createElement('div');
+    meta.className = 'media-card-meta';
+    meta.textContent = `Brasil • ${channel.category || 'Geral'}`;
+
+    card.appendChild(poster);
+    card.appendChild(title);
+    card.appendChild(meta);
+    return card;
+  },
+
+  openIptvDetails(channel) {
+    channel.summary = channel.summary || `Canal ${channel.name} ao vivo integrado via catálogo brasileiro da Saimo TV.`;
+    this.openPlutoDetails(channel);
   },
 
   createPlutoCard(channel, isKids = false) {
@@ -1334,7 +1642,7 @@ const App = {
         pill.classList.add('active');
         this.selectedCategory = pill.getAttribute('data-category');
         const plutoPills = document.getElementById('pluto-category-pills');
-        if (this.selectedCategory === 'pluto') {
+        if (this.selectedCategory === 'pluto' || this.selectedCategory === 'iptv') {
           if (plutoPills) plutoPills.style.display = 'flex';
         } else {
           if (plutoPills) plutoPills.style.display = 'none';

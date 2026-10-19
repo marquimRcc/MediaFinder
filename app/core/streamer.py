@@ -370,6 +370,17 @@ class RangeHTTPRequestHandler(BaseHTTPRequestHandler):
             }, 200, send_body)
             return
 
+        # GET /api/iptv/channels
+        if path == "/api/iptv/channels":
+            from app.core.iptv import IPTVService
+            svc = IPTVService.get_instance()
+            cat = query_params.get("category", [None])[0]
+            q = query_params.get("query", [None])[0]
+            channels = svc.get_channels(category=cat, query=q)
+            categories = svc.get_categories()
+            self._send_json_response({"channels": channels, "categories": categories}, 200, send_body)
+            return
+
         # GET /api/cast/devices
         if path == "/api/cast/devices":
             cast_mgr = TVCastManager.get_instance()

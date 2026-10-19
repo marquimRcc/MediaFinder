@@ -577,18 +577,133 @@ body {
   justify-content: space-between;
 }
 
+.carousel-wrapper {
+  position: relative;
+  width: 100%;
+}
+
 .carousel-row {
   display: flex;
   gap: 14px;
   overflow-x: auto;
   padding-bottom: 16px;
   margin-bottom: 18px;
-  scroll-snap-type: x mandatory;
+  scroll-snap-type: x proximity;
+  scroll-behavior: smooth;
   scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
 
 .carousel-row::-webkit-scrollbar {
   display: none;
+}
+
+/* Scroll Paddles Verticais em Cápsula (Estilo Saimo TV) */
+.carousel-paddle {
+  position: absolute;
+  top: 0;
+  bottom: 16px;
+  margin: auto 0;
+  width: 38px;
+  height: 136px;
+  border-radius: 9999px;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  transition: opacity 0.25s ease, background 0.2s ease, border-color 0.2s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease, color 0.2s ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.carousel-paddle svg {
+  width: 22px;
+  height: 22px;
+  stroke-width: 2.8;
+  transition: transform 0.2s ease, filter 0.2s ease;
+  pointer-events: none;
+}
+
+.carousel-paddle.paddle-left {
+  left: 6px;
+}
+
+.carousel-paddle.paddle-right {
+  right: 6px;
+}
+
+/* Visibilidade inteligente */
+.carousel-paddle.is-active {
+  opacity: 0.85;
+  pointer-events: auto;
+}
+
+.carousel-wrapper:hover .carousel-paddle.is-active {
+  opacity: 1;
+}
+
+/* Hover com Glow Neon Ciano Vibrante (idêntico à captura do Saimo TV) */
+.carousel-paddle.is-active:hover {
+  background: linear-gradient(180deg, rgba(8, 51, 68, 0.95), rgba(6, 182, 212, 0.38));
+  border-color: rgba(56, 189, 248, 0.85);
+  color: #ffffff;
+  box-shadow: 0 0 22px rgba(6, 182, 212, 0.6), 0 0 40px rgba(6, 182, 212, 0.25), inset 0 0 12px rgba(56, 189, 248, 0.35);
+  transform: scale(1.06);
+}
+
+.carousel-paddle.is-active:hover svg {
+  filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.9));
+}
+
+.carousel-paddle.paddle-left.is-active:hover svg {
+  transform: translateX(-2px);
+}
+
+.carousel-paddle.paddle-right.is-active:hover svg {
+  transform: translateX(2px);
+}
+
+.carousel-paddle:active {
+  transform: scale(0.95);
+}
+
+/* Tema Kids: Glow Neon Laranja Quente */
+#view-kids .carousel-paddle.is-active:hover {
+  background: linear-gradient(180deg, rgba(67, 20, 7, 0.95), rgba(251, 146, 60, 0.4));
+  border-color: rgba(251, 146, 60, 0.9);
+  color: #ffffff;
+  box-shadow: 0 0 22px rgba(251, 146, 60, 0.6), 0 0 40px rgba(249, 115, 22, 0.25), inset 0 0 12px rgba(251, 146, 60, 0.35);
+}
+
+#view-kids .carousel-paddle.is-active:hover svg {
+  filter: drop-shadow(0 0 6px rgba(251, 146, 60, 0.9));
+}
+
+/* Adaptação para telas menores */
+@media (max-width: 768px) {
+  .carousel-paddle {
+    width: 32px;
+    height: 110px;
+  }
+  .carousel-paddle.paddle-left {
+    left: 2px;
+  }
+  .carousel-paddle.paddle-right {
+    right: 2px;
+  }
+  .carousel-paddle svg {
+    width: 18px;
+    height: 18px;
+  }
 }
 
 .media-card {
@@ -599,11 +714,17 @@ body {
   border-radius: var(--radius-md);
   overflow: hidden;
   cursor: pointer;
-  transition: transform 0.2s;
+  transition: transform 0.25s cubic-bezier(0.2, 0, 0, 1), border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.media-card:hover {
+  transform: translateY(-4px) scale(1.02);
+  border-color: rgba(56, 189, 248, 0.5);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 14px rgba(6, 182, 212, 0.25);
 }
 
 .media-card:active {
-  transform: scale(0.95);
+  transform: scale(0.96);
 }
 
 .media-poster {
