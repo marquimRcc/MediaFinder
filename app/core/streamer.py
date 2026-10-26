@@ -74,6 +74,48 @@ def get_local_ip() -> str:
         return "127.0.0.1"
 
 
+def get_tailscale_ip() -> Optional[str]:
+    """Retorna o endereço IP IPv4 do Tailscale na máquina local se ativo (faixa 100.64.0.0/10)."""
+    import shutil
+    import subprocess
+
+    # 1. Tentar comando oficial tailscale CLI
+    tailscale_bin = shutil.which("tailscale")
+    if tailscale_bin:
+        try:
+            res = subprocess.run([tailscale_bin, "ip", "-4"], capture_output=True, text=True, timeout=1.5)
+            if res.returncode == 0 and res.stdout.strip():
+                ip = res.stdout.strip().splitlines()[0]
+                if ip.startswith("100."):
+                    return ip
+        except Exception:
+            pass
+
+    # 2. Inspecionar interfaces de rede (tailscale0)
+    try:
+        res = subprocess.run(["ip", "-brief", "addr", "show", "tailscale0"], capture_output=True, text=True, timeout=1.5)
+        if res.returncode == 0 and "100." in res.stdout:
+            for part in res.stdout.split():
+                if part.startswith("100."):
+                    return part.split("/")[0]
+    except Exception:
+        pass
+
+    return None
+
+
+def get_tailscale_info() -> Dict[str, Any]:
+    """Retorna o status completo de instalação e conexão do Tailscale no sistema local."""
+    import shutil
+    tailscale_bin = shutil.which("tailscale")
+    ip = get_tailscale_ip()
+    return {
+        "installed": tailscale_bin is not None,
+        "active": ip is not None,
+        "ip": ip,
+    }
+
+
 WEB_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web")
 
 
